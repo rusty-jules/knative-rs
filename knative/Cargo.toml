@@ -1,0 +1,15 @@
+[package]
+name = "knative"
+version = "0.1.0"
+edition = "2021"
+authors = ["Julian Aichholz <julianaichholz@gmail.com>"]
+
+[dependencies]
+chrono = { version = "0.4.19", features = ["serde"] }
+k8s-openapi = { version = "0.14.0", features = ["v1_22", "schemars"] }
+kube = { version = "0.70.0", features = ["derive"] }
+schemars = { version = "0.8.8", features = ["chrono", "url"] }
+serde = { version = "1.0.136", features = ["derive"] }
+serde_json = "1.0.79"
+thiserror = "1.0.30"
+url = { version = "2.2.2", features = ["serde"] }
