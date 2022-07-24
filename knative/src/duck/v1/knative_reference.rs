@@ -29,13 +29,13 @@ pub struct KReference {
     pub group: Option<String>,
 }
 
-impl Into<ObjectReference> for KReference {
-    fn into(self) -> ObjectReference {
+impl From<KReference> for ObjectReference {
+    fn from(reference: KReference) -> ObjectReference {
         ObjectReference {
-            name: Some(self.name),
-            namespace: self.namespace,
-            api_version: self.api_version,
-            kind: Some(self.kind),
+            name: Some(reference.name),
+            namespace: reference.namespace,
+            api_version: reference.api_version,
+            kind: Some(reference.kind),
             ..Default::default()
         }
     }
