@@ -140,6 +140,18 @@ impl SourceStatus {
         }
     }
 
+    pub fn mark_not_ready(&mut self, reason: &str, message: String) {
+        if let Some(ref mut cond) = &mut self.status.conditions {
+            cond.mark_false(ConditionType::Ready, reason.to_string(), Some(message))
+        }
+    }
+
+    pub fn mark_unknown(&mut self) {
+        if let Some(ref mut cond) = &mut self.status.conditions {
+            cond.mark_unknown(ConditionType::Ready)
+        }
+    }
+
     /// Set the condition that the source has a sink configured
     pub fn mark_sink(&mut self, uri: url::Url) {
         self.sink_uri = Some(uri);

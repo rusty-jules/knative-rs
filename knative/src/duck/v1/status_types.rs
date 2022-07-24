@@ -102,6 +102,14 @@ impl Conditions {
             ..Default::default()
         });
     }
+
+    pub fn mark_unknown(&mut self, condition_type: ConditionType) {
+        self.set_cond(Condition {
+            type_: condition_type,
+            status: ConditionStatus::Unknown,
+            ..Default::default()
+        })
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema, PartialEq)]
