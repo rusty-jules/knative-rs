@@ -1,5 +1,10 @@
 use crate::error::Error;
 use k8s_openapi::api::core::v1::ObjectReference;
+use kube::{
+    api::{DynamicObject, GroupVersionKind},
+    core::object,
+    discovery, Api, ResourceExt,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -42,8 +47,20 @@ impl Into<ObjectReference> for KReference {
 }
 
 impl KReference {
-    pub fn resolve_uri(&self, _client: kube::Client) -> Result<url::Url, Error> {
-        let _object_reference: ObjectReference = self.clone().into();
+    pub async fn resolve_uri(
+        &self,
+        client: kube::Client,
+    ) -> Result<url::Url, Box<dyn std::error::Error>> {
+        // let object_reference: ObjectReference = self.clone().into();
+        let gvk = GroupVersionKind::gvk(
+            self.group.as_ref().unwrap(),
+            self.api_version.as_ref().unwrap(),
+            self.kind.as_ref(),
+        );
+        let (ar, _caps) = discovery::pinned_kind(&client, &gvk).await?;
+        let api: Api<DynamicObject> = Api::all_with(client.clone(), &ar);
+        let _obj = api.get(self.name.as_ref()).await?;
+        // TODO: into duckv1.AddressableType is not implemented yet.
         unimplemented!("see knative.dev/pkg/resolver/addressable_resolver.go")
     }
 }
