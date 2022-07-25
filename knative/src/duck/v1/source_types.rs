@@ -1,9 +1,7 @@
 #![allow(dead_code)]
 use super::{
     knative_reference::KReference,
-    status_types::{
-        ConditionStatus, ConditionType, Status,
-    },
+    status_types::{ConditionStatus, ConditionType, Status},
 };
 use crate::error::{DiscoveryError, Error};
 use kube::CustomResource;
@@ -52,14 +50,14 @@ impl From<KReference> for Destination {
                     (Some(api_version), _) if api_version.contains("/") => Some(api_version),
                     (Some(api_version), Some(group)) => Some(group + "/" + &api_version),
                     (Some(api_version), None) => Some(api_version),
-                    (None, _) => None
+                    (None, _) => None,
                 },
                 group: None,
                 kind: reference.kind,
                 namespace: reference.namespace,
-                name: reference.name
+                name: reference.name,
             }),
-            uri: None
+            uri: None,
         }
     }
 }
@@ -68,20 +66,23 @@ impl From<url::Url> for Destination {
     fn from(uri: url::Url) -> Self {
         Destination {
             ref_: None,
-            uri: Some(uri)
+            uri: Some(uri),
         }
     }
 }
 
 impl Destination {
-    pub fn resolve_uri(&self, client: kube::Client) -> Result<url::Url, Error> {
+    pub async fn resolve_uri(
+        &self,
+        client: kube::Client,
+    ) -> Result<url::Url, Box<dyn std::error::Error>> {
         match (&self.ref_, &self.uri) {
             (Some(ref ref_), _) => {
-                let url = ref_.resolve_uri(client)?;
+                let url = ref_.resolve_uri(client).await?;
                 Ok(url)
             }
             (None, Some(ref uri)) => Ok(uri.clone()),
-            (None, None) => Err(Error::Discovery(DiscoveryError::EmptyDestination))
+            (None, None) => Err(Box::new(Error::Discovery(DiscoveryError::EmptyDestination))),
         }
     }
 }
@@ -152,7 +153,11 @@ impl SourceStatus {
     pub fn mark_no_sink(&mut self, reason: &str, message: String) {
         self.sink_uri = None;
         if let Some(ref mut cond) = &mut self.status.conditions {
-            cond.mark_false(ConditionType::SinkProvided, reason.to_string(), Some(message))
+            cond.mark_false(
+                ConditionType::SinkProvided,
+                reason.to_string(),
+                Some(message),
+            )
         }
     }
 }
