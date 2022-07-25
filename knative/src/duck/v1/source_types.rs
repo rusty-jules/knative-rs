@@ -71,14 +71,14 @@ impl Destination {
     pub async fn resolve_uri(
         &self,
         client: kube::Client,
-    ) -> Result<url::Url, Box<dyn std::error::Error>> {
+    ) -> Result<url::Url, Error> {
         match (&self.ref_, &self.uri) {
             (Some(ref ref_), _) => {
                 let url = ref_.resolve_uri(client).await?;
                 Ok(url)
             }
             (None, Some(ref uri)) => Ok(uri.clone()),
-            (None, None) => Err(Box::new(Error::Discovery(DiscoveryError::EmptyDestination))),
+            (None, None) => Err(Error::Discovery(DiscoveryError::EmptyDestination)),
         }
     }
 }

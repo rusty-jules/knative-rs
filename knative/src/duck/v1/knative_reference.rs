@@ -50,16 +50,16 @@ impl KReference {
     pub async fn resolve_uri(
         &self,
         client: kube::Client,
-    ) -> Result<url::Url, Box<dyn std::error::Error>> {
+    ) -> Result<url::Url, Error> {
         // let object_reference: ObjectReference = self.clone().into();
         let gvk = GroupVersionKind::gvk(
             self.group.as_ref().unwrap(),
             self.api_version.as_ref().unwrap(),
-            self.kind.as_ref(),
+            &self.kind,
         );
         let (ar, _caps) = discovery::pinned_kind(&client, &gvk).await?;
         let api: Api<DynamicObject> = Api::all_with(client.clone(), &ar);
-        let _obj = api.get(self.name.as_ref()).await?;
+        let _obj = api.get(&self.name).await?;
         // TODO: into duckv1.AddressableType is not implemented yet.
         unimplemented!("see knative.dev/pkg/resolver/addressable_resolver.go")
     }
