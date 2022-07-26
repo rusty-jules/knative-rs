@@ -491,4 +491,12 @@ mod test {
         assert_eq!(iter.next().unwrap().type_, ConditionType::sinkprovided());
         assert_eq!(iter.next().unwrap().type_, ConditionType::Succeeded);
     }
+
+    #[test]
+    fn condition_type_deserializes() {
+        let condition_type: ConditionType = serde_json::from_value(serde_json::json!(
+            "SinkProvided"
+        )).unwrap();
+        assert!(condition_type == ConditionType::sinkprovided())
+    }
 }

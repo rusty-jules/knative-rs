@@ -128,25 +128,35 @@ pub trait SourceManager<'de, const N: usize> {
     /// ### As &'static str
     ///
     /// ```rust
+    /// use knative::duck::v1::source_types::{SourceStatus, SourceManager};
+    /// use knative::duck::v1::status_types::Conditions;
+    ///
+    /// struct MyStatus {}
+    ///
     /// impl<'de> SourceManager<'de, 1> for MyStatus {
-    ///     type Dependents = &'static str;
+    ///     type Dependents = &'de str;
     ///
     ///     fn dependents() -> [Self::Dependents; 1] {
     ///         ["SinkProvided"]
     ///     }
     ///
-    ///     ...
+    ///     fn conditions(&mut self) -> &mut Conditions { todo!() }
+    ///     fn source_status(&mut self) -> &mut SourceStatus { todo!() }
     /// }
     /// ```
     ///
     /// ### As an Enum
     ///
     /// ```rust
+    /// use knative::duck::v1::source_types::{SourceStatus, SourceManager};
+    /// use knative::duck::v1::status_types::Conditions;
     /// use schemars::JsonSchema;
     /// use serde::{Serialize, Deserialize};
     /// use std::fmt;
     ///
-    /// #[derive(Deserialize, Serialize, Clone, JsonSchema)]
+    /// struct MyStatus {}
+    ///
+    /// #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
     /// enum MyConditions {
     ///     SinkProvided,
     ///     VeryImportant,
@@ -166,7 +176,8 @@ pub trait SourceManager<'de, const N: usize> {
     ///         [MyConditions::SinkProvided, MyConditions::VeryImportant]
     ///     }
     ///
-    ///     ...
+    ///     fn conditions(&mut self) -> &mut Conditions { todo!() }
+    ///     fn source_status(&mut self) -> &mut SourceStatus { todo!() }
     /// }
     /// ```
     fn dependents() -> [Self::Dependents; N];
