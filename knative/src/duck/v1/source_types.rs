@@ -1,23 +1,14 @@
 #![allow(dead_code)]
 use super::{
     knative_reference::KReference,
-    status_types::{
-        ConditionType, ConditionManager, Conditions, Condition, Status,
-    },
+    status_types::Status,
 };
+use knative_conditions::{ConditionManager, Condition, Conditions};
 use crate::error::{DiscoveryError, Error};
-use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(CustomResource, Serialize, Deserialize, Default, Clone, Debug, JsonSchema)]
-#[kube(
-    kind = "Source",
-    group = "knative.dev",
-    status = "SourceStatus",
-    version = "v1",
-    namespaced
-)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceSpec {
     /// Sink is a reference to an object that will resolve to a uri to use as the sink.
@@ -101,14 +92,14 @@ pub struct CloudEventOverrides {
 /// their Status field.
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct SourceStatus {
+pub struct SourceStatus<S: SourceConditionType<N>, const N: usize> {
     /// inherits Status, which currently provides:
     /// * ObservedGeneration - the 'Generation' of the Service that was last
     ///   processed by the controller.
     /// * Conditions - the latest available observations of a resource's current
     ///   state.
     #[serde(flatten)]
-    pub status: Status,
+    pub status: Status<S, N>,
     /// SinkURI is the current active sink URI that has been configured for the
     /// Source.
     pub sink_uri: Option<url::Url>,
@@ -117,84 +108,42 @@ pub struct SourceStatus {
     pub cloud_event_attributes: Option<Vec<CloudEventAttributes>>,
 }
 
+/// A baseline ConditionType for SourceStatus.
+/// Custom conditions should implement [`SourceConditionType`]
+///
+/// [`SourceConditionType`]: ./.trait.SourceConditionType.html
+#[derive(crate::derive::ConditionType, Deserialize, Serialize, Copy, Clone, Debug, JsonSchema, PartialEq)]
+pub enum SourceCondition {
+    Ready,
+    #[dependent]
+    SinkProvided
+}
+
+pub trait SourceConditionType<const N:usize>: knative_conditions::ConditionType<N> {
+    fn sinkprovided() -> Self;
+}
+
+impl SourceConditionType<1> for SourceCondition {
+    fn sinkprovided() -> Self {
+        Self::sinkprovided()
+    }
+}
+
 /// Allows a source status CR to manage its Conditions
-pub trait SourceManager<'de, const N: usize> {
-    /// The [`ConditionTypes`] that the `Ready` status of the source depends on.
-    ///
-    /// [`ConditionTypes`]: ../status_types/enum.ConditionType.html
-    type Dependents: Deserialize<'de> + Serialize + Clone + JsonSchema + ToString;
-
-    /// Return the dependent ConditionTypes. Can be defined in a number of ways:
-    /// ### As &'static str
-    ///
-    /// ```rust
-    /// use knative::duck::v1::source_types::{SourceStatus, SourceManager};
-    /// use knative::duck::v1::status_types::Conditions;
-    ///
-    /// struct MyStatus {}
-    ///
-    /// impl<'de> SourceManager<'de, 1> for MyStatus {
-    ///     type Dependents = &'de str;
-    ///
-    ///     fn dependents() -> [Self::Dependents; 1] {
-    ///         ["SinkProvided"]
-    ///     }
-    ///
-    ///     fn conditions(&mut self) -> &mut Conditions { todo!() }
-    ///     fn source_status(&mut self) -> &mut SourceStatus { todo!() }
-    /// }
-    /// ```
-    ///
-    /// ### As an Enum
-    ///
-    /// ```rust
-    /// use knative::duck::v1::source_types::{SourceStatus, SourceManager};
-    /// use knative::duck::v1::status_types::Conditions;
-    /// use schemars::JsonSchema;
-    /// use serde::{Serialize, Deserialize};
-    /// use std::fmt;
-    ///
-    /// struct MyStatus {}
-    ///
-    /// #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
-    /// enum MyConditions {
-    ///     SinkProvided,
-    ///     VeryImportant,
-    ///     NotImportant
-    /// }
-    ///
-    /// impl fmt::Display for MyConditions {
-    ///     fn fmt<'a>(&self, fmt: &mut fmt::Formatter<'a>) -> fmt::Result {
-    ///         std::write!(fmt, "{:?}", self)
-    ///     }
-    /// }
-    ///
-    /// impl<'de> SourceManager<'de, 2> for MyStatus {
-    ///     type Dependents = MyConditions;
-    ///
-    ///     fn dependents() -> [Self::Dependents; 2] {
-    ///         [MyConditions::SinkProvided, MyConditions::VeryImportant]
-    ///     }
-    ///
-    ///     fn conditions(&mut self) -> &mut Conditions { todo!() }
-    ///     fn source_status(&mut self) -> &mut SourceStatus { todo!() }
-    /// }
-    /// ```
-    fn dependents() -> [Self::Dependents; N];
-
+pub trait SourceManager<S: knative_conditions::ConditionType<N> + SourceConditionType<N>, const N: usize> {
     /// Return the conditions of your CRD Status type.
-    fn conditions(&mut self) -> &mut Conditions;
+    fn conditions(&mut self) -> &mut Conditions<S, N>;
 
     /// Return the SourceStatus of your CRD Status type.
-    fn source_status(&mut self) -> &mut SourceStatus;
+    fn source_status(&mut self) -> &mut SourceStatus<S, N>;
 
     /// Construct a [`ConditionManager`] of your dependent Conditions and the
     /// `Ready` or `Succeeded` status.
     ///
     /// [`ConditionManager`]: ../status_types/struct.ConditionManager.html
-    fn manager(&mut self) -> ConditionManager<N> {
+    fn manager(&mut self) -> ConditionManager<S, N> {
         ConditionManager::new_living(
-            Self::dependents().map(|d| ConditionType::Extension(d.to_string())),
+            S::dependents(),
             self.conditions()
         )
     }
@@ -207,37 +156,29 @@ pub trait SourceManager<'de, const N: usize> {
     /// Set the condition that the source has a sink configured
     fn mark_sink(&mut self, uri: url::Url) {
         self.source_status().sink_uri = Some(uri);
-        self.manager().mark_true(&ConditionType::sinkprovided());
+        self.manager().mark_true(S::sinkprovided());
     }
 
     /// Set the condition that the source has no sink configured
     fn mark_no_sink(&mut self, reason: &str, message: Option<String>) {
         self.source_status().sink_uri = None;
-        self.manager().mark_false(&ConditionType::sinkprovided(), reason, message);
+        self.manager().mark_false(S::sinkprovided(), reason, message);
     }
 
     /// Set the condition that the source status is unknown. Typically used when beginning the
     /// reconciliation of a new generation.
     fn mark_unknown(&mut self) {
-        let mut cm = self.manager();
-        let type_ = &cm.get_top_level_condition().type_.clone();
-        cm.mark_unknown(
-            type_,
+        let t = self.manager().get_top_level_condition().type_;
+        self.manager().mark_unknown(
+            t,
             "NewObservedGenFailure",
             Some("unsuccessfully observed a new generation".into())
         );
     }
 }
 
-#[allow(unreachable_patterns)]
-impl<'de> SourceManager<'de, 1> for SourceStatus {
-    type Dependents = ConditionType;
-
-    fn dependents() -> [ConditionType; 1] {
-        [ConditionType::sinkprovided()]
-    }
-
-    fn conditions(&mut self) -> &mut Conditions {
+impl SourceManager<SourceCondition, 1> for SourceStatus<SourceCondition, 1> {
+    fn conditions(&mut self) -> &mut Conditions<SourceCondition, 1> {
         match self.status.conditions {
             Some(ref mut conditions) => conditions,
             None => {
@@ -245,7 +186,7 @@ impl<'de> SourceManager<'de, 1> for SourceStatus {
                     vec![
                         Condition::default(),
                         Condition {
-                            type_: ConditionType::sinkprovided(),
+                            type_: SourceCondition::sinkprovided(),
                             ..Default::default()
                         },
                     ]));
@@ -254,7 +195,7 @@ impl<'de> SourceManager<'de, 1> for SourceStatus {
         }
     }
 
-    fn source_status(&mut self) -> &mut SourceStatus {
+    fn source_status(&mut self) -> &mut SourceStatus<SourceCondition, 1> {
         self
     }
 }

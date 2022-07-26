@@ -1,0 +1,20 @@
+[package]
+name = "knative-derive"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[[test]]
+name = "tests"
+path = "tests/test.rs"
+
+[dependencies]
+proc-macro2 = "1.0.42"
+proc-macro2-diagnostics = "0.9.1"
+quote = "1.0.20"
+syn = { version = "1.0.98", features = ["extra-traits"] }
+knative-conditions = { path = "../knative-conditions" }
+serde = { version = "1.0.140", features = ["derive"] }
+schemars = "0.8.10"
