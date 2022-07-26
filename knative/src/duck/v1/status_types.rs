@@ -49,8 +49,12 @@ impl Conditions {
         Conditions(vec![])
     }
 
-    pub fn get_cond(&mut self, type_: ConditionType) -> Option<&mut Condition> {
-        self.iter_mut().find(|c| c.type_ == type_)
+    pub fn with_conditions(conditions: Vec<Condition>) -> Conditions {
+        Conditions(conditions)
+    }
+
+    pub fn get_cond(&mut self, type_: &ConditionType) -> Option<&mut Condition> {
+        self.iter_mut().find(|c| c.type_ == *type_)
     }
 
     pub fn set_cond(&mut self, mut condition: Condition) {
@@ -60,7 +64,7 @@ impl Conditions {
         // it updates that single condition, re-sorts the array of conditions
         // by Type (alphabetically?) and sets the new array as the conditions.
         // This may be due to the "accessor" interface that we have skipped here.
-        match self.get_cond(condition.type_) {
+        match self.get_cond(&condition.type_) {
             Some(cond) => {
                 // Check if only the time has changed
                 let test_cond = Condition {
@@ -85,17 +89,17 @@ impl Conditions {
         }
     }
 
-    pub fn mark_true(&mut self, condition_type: ConditionType) {
+    pub fn mark_true(&mut self, condition_type: &ConditionType) {
         self.set_cond(Condition {
-            type_: condition_type,
+            type_: condition_type.clone(),
             status: ConditionStatus::True,
             ..Default::default()
         })
     }
 
-    pub fn mark_true_with_reason(&mut self, condition_type: ConditionType, reason: String, message: Option<String>) {
+    pub fn mark_true_with_reason(&mut self, condition_type: &ConditionType, reason: String, message: Option<String>) {
         self.set_cond(Condition {
-            type_: condition_type,
+            type_: condition_type.clone(),
             status: ConditionStatus::True,
             reason: Some(reason),
             message,
@@ -103,9 +107,9 @@ impl Conditions {
         })
     }
 
-    pub fn mark_false(&mut self, condition_type: ConditionType, reason: String, message: Option<String>) {
+    pub fn mark_false(&mut self, condition_type: &ConditionType, reason: String, message: Option<String>) {
         self.set_cond(Condition {
-            type_: condition_type,
+            type_: condition_type.clone(),
             status: ConditionStatus::False,
             reason: Some(reason),
             message,
@@ -113,17 +117,17 @@ impl Conditions {
         });
     }
 
-    pub fn mark_unknown(&mut self, condition_type: ConditionType) {
+    pub fn mark_unknown(&mut self, condition_type: &ConditionType) {
         self.set_cond(Condition {
-            type_: condition_type,
+            type_: condition_type.clone(),
             status: ConditionStatus::Unknown,
             ..Default::default()
         })
     }
 
-    pub fn mark_unknown_with_reason(&mut self, condition_type: ConditionType, reason: String, message: Option<String>) {
+    pub fn mark_unknown_with_reason(&mut self, condition_type: &ConditionType, reason: String, message: Option<String>) {
         self.set_cond(Condition {
-            type_: condition_type,
+            type_: condition_type.clone(),
             status: ConditionStatus::Unknown,
             reason: Some(reason),
             message,
@@ -132,7 +136,7 @@ impl Conditions {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema, PartialEq)]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, PartialEq)]
 pub struct Condition {
     #[serde(rename = "type")]
     pub type_: ConditionType,
@@ -143,12 +147,26 @@ pub struct Condition {
     /// the case where the condition is in state "True" (aka nothing is wrong).
     // In rust lang we accomplish this with Error as a Default variant
     #[serde(default)]
+    #[serde(skip_serializing_if = "ConditionSeverity::is_err")]
     pub severity: ConditionSeverity,
     // TODO: make this a "VolatileTime"
     //#[serde(deserialize_with = "from_ts")]
     pub last_transition_time: Option<chrono::DateTime<chrono::Utc>>,
     pub reason: Option<String>,
     pub message: Option<String>,
+}
+
+impl Default for Condition {
+    fn default() -> Condition {
+        Condition {
+            type_: ConditionType::default(),
+            status: ConditionStatus::default(),
+            severity: ConditionSeverity::default(),
+            last_transition_time: Some(chrono::Utc::now()),
+            reason: None,
+            message: None
+        }
+    }
 }
 
 impl PartialOrd for Condition {
@@ -185,8 +203,7 @@ impl Default for ConditionStatus {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, JsonSchema, PartialEq)]
-#[non_exhaustive]
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, PartialEq)]
 pub enum ConditionType {
     /// Specifies that the resource is ready.
     /// For long-running resources.
@@ -194,8 +211,36 @@ pub enum ConditionType {
     /// Specifies that the resource has finished.
     /// For resources which run to completion.
     Succeeded,
-    /// Specifies whether the sink has been properly extracted from the resolver.
-    SinkProvided,
+    /// Extensible conditions
+    Extension(String)
+}
+
+impl std::fmt::Display for ConditionType {
+    fn fmt<'a>(&self, fmt: &mut std::fmt::Formatter<'a>) -> std::fmt::Result {
+        match self {
+            ConditionType::Ready => fmt.write_str("Ready"),
+            ConditionType::Succeeded => fmt.write_str("Succeeded"),
+            ConditionType::Extension(s) => std::write!(fmt, "{}", s),
+        }
+    }
+}
+
+impl PartialEq<str> for ConditionType {
+    fn eq(&self, rhs: &str) -> bool {
+        match (self, rhs) {
+            (ConditionType::Ready, "Ready") => true,
+            (ConditionType::Succeeded, "Succeeded") => true,
+            (ConditionType::Extension(ref s), rhs) if s == rhs => true,
+            _ => false
+        }
+    }
+}
+
+impl ConditionType {
+    /// Convenience function for the SinkProvided ConditionType
+    pub fn sinkprovided() -> Self {
+        ConditionType::Extension("SinkProvided".into())
+    }
 }
 
 impl Default for ConditionType {
@@ -210,6 +255,12 @@ pub enum ConditionSeverity {
     Error,
     Warning,
     Info,
+}
+
+impl ConditionSeverity {
+    fn is_err(&self) -> bool {
+        *self == ConditionSeverity::Error
+    }
 }
 
 impl Default for ConditionSeverity {
@@ -232,24 +283,40 @@ impl Condition {
     }
 }
 
-struct ConditionManager<'a, const N: usize> {
+pub struct ConditionManager<'a, const N: usize> {
     set: ConditionSet<N>,
     conditions: &'a mut Conditions,
 }
 
 impl<'a, const N: usize> ConditionManager<'a, N> {
-    pub fn new(set: ConditionSet<N>, conditions: &'a mut Conditions) -> Self {
+    /// Construct a new ConditionManager for long running resources.
+    pub fn new_living(dependents: [ConditionType; N], conditions: &'a mut Conditions) -> Self {
+        Self::new(ConditionType::Ready, dependents, conditions)
+    }
+
+    /// Construct a new ConditionManager for resources that can complete.
+    pub fn new_batch(dependents: [ConditionType; N], conditions: &'a mut Conditions) -> Self {
+        Self::new(ConditionType::Succeeded, dependents, conditions)
+    }
+
+    fn new(happy: ConditionType, dependents: [ConditionType; N], conditions: &'a mut Conditions) -> Self {
+        assert!(
+            !dependents.contains(&happy),
+            "dependents may not contain happy condition: use Extension conditions only"
+        );
+        let set = ConditionSet { happy, dependents };
         ConditionManager { set, conditions }
     }
 
-    fn get_condition(&self, condition_type: ConditionType) -> Option<&Condition> {
-        self.conditions.iter().find(|cond| cond.type_ == condition_type)
+    pub fn get_condition(&self, condition_type: &ConditionType) -> Option<&Condition> {
+        self.conditions.iter().find(|cond| cond.type_ == *condition_type)
     }
 
-
-    /// Returns the happy condition
-    fn get_top_level_condition(&self) -> Option<&Condition> {
-        self.get_condition(self.set.happy)
+    /// Returns the happy condition.
+    pub fn get_top_level_condition(&self) -> &Condition {
+        self.get_condition(&self.set.happy)
+            .as_ref()
+            .expect("top level condition is initialized")
     }
 
     fn set_condition(&mut self, condition: Condition) {
@@ -257,29 +324,27 @@ impl<'a, const N: usize> ConditionManager<'a, N> {
     }
 
     pub fn is_happy(&self) -> bool {
-        self.get_top_level_condition()
-            .map(|c| c.is_true())
-            .unwrap_or(false)
+        self.get_top_level_condition().is_true()
     }
 
-    /// Whether the ConditionType determines happiness
-    fn is_terminal(&self, condition_type: ConditionType) -> bool {
-        self.set.is_terminal(condition_type)
+    /// Whether the ConditionType determines happiness.
+    fn is_terminal(&self, condition_type: &ConditionType) -> bool {
+        self.set.is_terminal(&condition_type)
     }
 
     fn find_unhappy_dependent(&mut self) -> Option<&mut Condition> {
         self.conditions
             .iter_mut()
             // Filter to non-true, terminal dependents
-            .filter(|cond| cond.type_ != self.set.happy && self.set.is_terminal(cond.type_) && !cond.is_true())
+            .filter(|cond| cond.type_ != self.set.happy && self.set.is_terminal(&cond.type_) && !cond.is_true())
             // Return a condition, prioritizing most recent False over most recent Unknown
             .reduce(|unhappy, cond| if cond > unhappy { cond } else { unhappy })
     }
 
-    /// Mark the happy condition to true if all other dependents are also true
-    fn recompute_happiness(&mut self, condition_type: ConditionType) {
-        let type_ = self.set.happy;
-        let severity = self.set.severity(self.set.happy);
+    /// Mark the happy condition to true if all other dependents are also true.
+    fn recompute_happiness(&mut self, condition_type: &ConditionType) {
+        let type_ = self.set.happy.clone();
+        let severity = self.set.severity(&self.set.happy);
 
         let cond = if let Some(dependent) = self.find_unhappy_dependent() {
             // make unhappy dependent reflect in happy condition
@@ -291,7 +356,7 @@ impl<'a, const N: usize> ConditionManager<'a, N> {
                 severity,
                 ..Default::default()
             })
-        } else if condition_type != self.set.happy {
+        } else if *condition_type != self.set.happy {
             // set happy to true
             Some(Condition {
                 type_,
@@ -308,60 +373,60 @@ impl<'a, const N: usize> ConditionManager<'a, N> {
         }
     }
 
-    pub fn mark_true(&mut self, condition_type: ConditionType) {
+    pub fn mark_true(&mut self, condition_type: &ConditionType) {
         self.conditions.mark_true(condition_type);
-        self.recompute_happiness(condition_type);
+        self.recompute_happiness(&condition_type);
     }
 
-    pub fn mark_true_with_reason(&mut self, condition_type: ConditionType, reason: &str, message: Option<String>) {
+    pub fn mark_true_with_reason(&mut self, condition_type: &ConditionType, reason: &str, message: Option<String>) {
         self.conditions.mark_true_with_reason(condition_type, reason.to_string(), message);
-        self.recompute_happiness(condition_type);
+        self.recompute_happiness(&condition_type);
+    }
+
+    /// Set the status of the condition type to false, as well as the happy condition if this
+    /// condition is a dependent.
+    pub fn mark_false(&mut self, condition_type: &ConditionType, reason: &str, message: Option<String>) {
+        self.conditions.mark_false(condition_type, reason.to_string(), message.clone());
+
+        if self.set.dependents.contains(&condition_type) {
+            self.conditions.mark_false(&self.set.happy, reason.to_string(), message)
+        }
     }
 
     /// Set the status to unknown and also set the happy condition to unknown if no other dependent
-    /// condition is in an error state
-    pub fn mark_unknown(&mut self, condition_type: ConditionType, reason: &str, message: Option<String>) {
+    /// condition is in an error state.
+    pub fn mark_unknown(&mut self, condition_type: &ConditionType, reason: &str, message: Option<String>) {
         self.conditions.mark_unknown_with_reason(condition_type, reason.to_string(), message.clone());
 
         // set happy condition to false if another dependent is false, otherwise set happy
         // condition to unknown if this condition is a dependent
         if let Some(dependent) = self.find_unhappy_dependent() {
             if dependent.is_false() {
-                if let Some(happy) = self.get_top_level_condition() {
-                    if !happy.is_false() {
-                        self.mark_false(self.set.happy, reason, message);
-                   }
-                }
+                let happy = self.get_top_level_condition();
+                if !happy.is_false() {
+                    self.mark_false(&self.set.happy.clone(), reason, message);
+               }
             }
-        } else if self.set.is_terminal(condition_type) {
-           self.conditions.mark_unknown_with_reason(self.set.happy, reason.to_string(), message);
+        } else if self.set.is_terminal(&condition_type) {
+           self.conditions.mark_unknown_with_reason(&self.set.happy, reason.to_string(), message);
         }
     }
 
-    /// Set the status of the condition type to false, as well as the happy condition if this
-    /// condition is a dependent
-    pub fn mark_false(&mut self, condition_type: ConditionType, reason: &str, message: Option<String>) {
-        self.conditions.mark_false(condition_type, reason.to_string(), message.clone());
-
-        if self.set.dependents.contains(&condition_type) {
-            self.conditions.mark_false(self.set.happy, reason.to_string(), message)
-        }
-    }
 }
 
 /// ConditionSet defines how a set of Conditions
-/// depend on one another
+/// depend on one another.
 struct ConditionSet<const N: usize> {
     pub happy: ConditionType,
     pub dependents: [ConditionType; N],
 }
 
 impl<const N: usize> ConditionSet<N> {
-    fn is_terminal(&self, condition_type: ConditionType) -> bool {
-        self.dependents.contains(&condition_type) || self.happy == condition_type
+    fn is_terminal(&self, condition_type: &ConditionType) -> bool {
+        self.dependents.contains(&condition_type) || self.happy == *condition_type
     }
 
-    fn severity(&self, condition_type: ConditionType) -> ConditionSeverity {
+    fn severity(&self, condition_type: &ConditionType) -> ConditionSeverity {
         if self.is_terminal(condition_type) {
             ConditionSeverity::Error
         } else {
@@ -386,19 +451,19 @@ mod test {
                 ..Default::default()
             },
             Condition {
-                type_: ConditionType::SinkProvided,
+                type_: ConditionType::sinkprovided(),
                 status: ConditionStatus::False,
                 last_transition_time: Some(dt.and_hms(1, 0, 0)),
                 ..Default::default()
             },
             Condition {
-                type_: ConditionType::SinkProvided,
+                type_: ConditionType::sinkprovided(),
                 status: ConditionStatus::Unknown,
                 last_transition_time: Some(dt.and_hms(2, 0, 0)),
                 ..Default::default()
             },
             Condition {
-                type_: ConditionType::SinkProvided,
+                type_: ConditionType::sinkprovided(),
                 status: ConditionStatus::False,
                 last_transition_time: Some(dt.and_hms(3, 0, 0)),
                 ..Default::default()
@@ -411,23 +476,18 @@ mod test {
             }
         ]);
 
-        let cond_set = ConditionSet {
-            happy: ConditionType::Ready,
-            dependents: [ConditionType::SinkProvided]
-        };
-
-        let mut manager = ConditionManager::new(cond_set, &mut conditions);
+        let mut manager = ConditionManager::new_living([ConditionType::sinkprovided()], &mut conditions);
         let unhappy = manager.find_unhappy_dependent().unwrap();
         // Returns most recent False dependent
-        assert_eq!(unhappy.type_, ConditionType::SinkProvided);
+        assert_eq!(unhappy.type_, ConditionType::sinkprovided());
         assert_eq!(unhappy.status, ConditionStatus::False);
         assert_eq!(unhappy.last_transition_time.unwrap(), dt.and_hms(3, 0, 0));
         // Maintains order
         let mut iter = conditions.iter();
         assert_eq!(iter.next().unwrap().type_, ConditionType::Ready);
-        assert_eq!(iter.next().unwrap().type_, ConditionType::SinkProvided);
-        assert_eq!(iter.next().unwrap().type_, ConditionType::SinkProvided);
-        assert_eq!(iter.next().unwrap().type_, ConditionType::SinkProvided);
+        assert_eq!(iter.next().unwrap().type_, ConditionType::sinkprovided());
+        assert_eq!(iter.next().unwrap().type_, ConditionType::sinkprovided());
+        assert_eq!(iter.next().unwrap().type_, ConditionType::sinkprovided());
         assert_eq!(iter.next().unwrap().type_, ConditionType::Succeeded);
     }
 }
