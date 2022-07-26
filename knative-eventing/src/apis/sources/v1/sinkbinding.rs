@@ -34,5 +34,5 @@ pub struct SinkBindingStatus {
     /// * conditions
     /// * sink_uri
     #[serde(flatten)]
-    pub source_status: duckv1::source_types::SourceStatus,
+    pub source_status: duckv1::source_types::SourceStatus<duckv1::source_types::SourceCondition, 1>,
 }

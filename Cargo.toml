@@ -1,5 +1,7 @@
 [workspace]
 members = [
     "knative",
-    "knative-eventing"
+    "knative-conditions",
+    "knative-derive",
+    "knative-eventing",
 ]
