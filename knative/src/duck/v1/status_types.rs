@@ -204,6 +204,7 @@ impl Default for ConditionStatus {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, PartialEq)]
+#[serde(untagged)]
 pub enum ConditionType {
     /// Specifies that the resource is ready.
     /// For long-running resources.
