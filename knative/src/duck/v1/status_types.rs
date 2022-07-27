@@ -23,7 +23,7 @@ impl<C: ConditionType<N>, const N: usize> Default for Status<C, N> {
     fn default() -> Status<C, N> {
         Status {
             observed_generation: Some(0i64),
-            conditions: Some(Conditions::new()),
+            conditions: Some(Conditions::default()),
             annotations: None
         }
     }
