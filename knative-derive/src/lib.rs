@@ -44,8 +44,14 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let capitalized = variants.iter()
         .map(|v| v.ident.clone())
         .filter(|v| !required_variants.contains(&v.to_string().as_str()));
+    let capitalized_again = capitalized.clone();
     let lower_case = capitalized.clone()
         .map(|v| Ident::new(&v.to_string().to_lowercase(), v.span()));
+
+    let mark = lower_case.clone().map(|l| Ident::new(&format!("mark_{l}"), l.span()));
+    let mark_not = lower_case.clone().map(|l| Ident::new(&format!("mark_not_{l}"), l.span()));
+
+    let manager_name = Ident::new(&format!("{name}Manager"), name.span());
 
     quote! {
         impl #name {
@@ -72,6 +78,21 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 #name::#happy
             }
         }
+
+        /// Allows a status to manage [`#manager_name`]
+        trait #manager_name: ::knative_conditions::ConditionAccessor<#name, #num_dependents> {
+            #(
+                fn #mark(&mut self) {
+                    self.manager().mark_true(#name::#capitalized_again);
+                }
+
+                fn #mark_not(&mut self, reason: &str, message: Option<String>) {
+                    self.manager().mark_false(#name::#capitalized_again, reason, message);
+                }
+            )*
+        }
+
+        impl<T: ::knative_conditions::ConditionAccessor<#name, #num_dependents> + ?Sized> #manager_name for T {}
     }.into()
 }
 
