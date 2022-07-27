@@ -1,40 +1,22 @@
 //! Derive [`ConditionType`] on your own types to adhere to the Knative Source schema and condition
 //! management.
-use proc_macro2::TokenStream;
-use proc_macro2_diagnostics::{SpanDiagnosticExt, Diagnostic};
+use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    spanned::Spanned,
+    parse_macro_input,
     Data::Enum,
     DeriveInput,
     Ident
 };
 
 #[proc_macro_derive(ConditionType, attributes(dependent))]
-pub fn wrapper(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    match derive(input) {
-        Ok(tokens) => tokens.into(),
-        Err(diag) => diag.emit_as_expr_tokens().into()
-    }
-}
-
-fn derive(input: proc_macro::TokenStream) -> Result<TokenStream, Diagnostic> {
-    let ast = syn::parse_macro_input::parse::<DeriveInput>(input.clone())
-        .map_err(|e| {
-            let tokens: TokenStream = input.into();
-            tokens.span().error(format!("{}", e))
-        })?;
+pub fn derive(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
 
     let name = &ast.ident;
     let variants = match ast.data {
         Enum(syn::DataEnum { ref variants, .. }) => variants,
         _ => panic!("ConditionType may only be derived on enums")
-    };
-
-    let first_var = if variants.is_empty() {
-        return Err(name.span().error("Requires at least one variant"))
-    } else {
-        variants.iter().nth(0).unwrap().clone()
     };
 
     let variants_with_attrs = variants.clone().into_iter()
@@ -48,18 +30,20 @@ fn derive(input: proc_macro::TokenStream) -> Result<TokenStream, Diagnostic> {
     let s = search.iter().map(|v| v.as_str()).collect::<Vec<&str>>();
 
     let (non_existent, non_existent_lower_case, existent, existent_lower_case) = if s.contains(&"Ready") && s.contains(&"Succeeded") {
-         Err(first_var.span().error("ConditionType must contain either Ready or Succeeded variant"))?
+         panic!("ConditionType must contain either Ready or Succeeded variant")
     } else if s.contains(&"Ready") {
         (Ident::new("Succeeded", name.span()), Ident::new("succeeded", name.span()), Ident::new("Ready", name.span()), Ident::new("ready", name.span()))
-    } else {
+    } else if s.contains(&"Succeeded") {
         (Ident::new("Ready", name.span()), Ident::new("ready", name.span()), Ident::new("Succeeded", name.span()), Ident::new("succeeded", name.span()))
+    } else {
+        panic!("ConditionType must contain either Ready or Succeeded variant")
     };
 
     let capitalized = capitalized.filter(|v| v.to_string() != "Ready" && v.to_string() != "Succeeded");
     let lower_case = capitalized.clone()
         .map(|v| Ident::new(&format!("{}", v).to_lowercase(), v.span()));
 
-    Ok(quote! {
+    quote! {
         impl #name {
             #(
                 pub fn #lower_case() -> Self {
@@ -99,6 +83,6 @@ fn derive(input: proc_macro::TokenStream) -> Result<TokenStream, Diagnostic> {
                 ::std::write!(f, "{:?}", self)
             }
         }
-    })
+    }.into()
 }
 
