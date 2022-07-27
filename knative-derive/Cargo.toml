@@ -11,8 +11,6 @@ name = "tests"
 path = "tests/test.rs"
 
 [dependencies]
-proc-macro2 = "1.0.42"
-proc-macro2-diagnostics = "0.9.1"
 quote = "1.0.20"
 syn = { version = "1.0.98", features = ["extra-traits"] }
 knative-conditions = { path = "../knative-conditions" }
