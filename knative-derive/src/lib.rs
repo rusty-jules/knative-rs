@@ -1,5 +1,7 @@
 //! Derive [`ConditionType`] on your own types to adhere to the Knative Source schema and condition
-//! management.
+//! management. Derives [`Default`] on your type, which must be the happy condition.
+//!
+//! [`ConditionType`]: ../knative_conditions/trait.ConditionType.html
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
@@ -19,29 +21,31 @@ pub fn derive(input: TokenStream) -> TokenStream {
         _ => panic!("ConditionType may only be derived on enums")
     };
 
-    let variants_with_attrs = variants.clone().into_iter()
-        .filter(|v| !v.attrs.is_empty())
+    let dependents = variants.clone().into_iter()
+        .filter(|v| v.attrs.iter().any(|a| a.path.segments.iter().any(|p| p.ident == "dependent")))
         .map(|v| v.ident);
-    let num_attrs: usize = variants_with_attrs.clone().count();
+    let num_dependents: usize = dependents.clone().count();
 
-    let capitalized = variants.iter().map(|v| v.ident.clone());
+    let required_variants = ["Ready", "Succeeded"];
+    let variant_strings: Vec<String> = variants.iter().map(|v| v.ident.to_string()).collect();
+    let dependent_strings: Vec<String> = dependents.clone().map(|d| d.to_string()).collect();
 
-    let search = capitalized.clone().map(|v| format!("{}", v)).collect::<Vec<String>>();
-    let s = search.iter().map(|v| v.as_str()).collect::<Vec<&str>>();
+    if let Some(required) = dependent_strings.iter().find(|d| required_variants.contains(&d.as_str())) {
+         panic!("{} variant may not be a dependent", required)
+    }
 
-    let (non_existent, non_existent_lower_case, existent, existent_lower_case) = if s.contains(&"Ready") && s.contains(&"Succeeded") {
-         panic!("ConditionType must contain either Ready or Succeeded variant")
-    } else if s.contains(&"Ready") {
-        (Ident::new("Succeeded", name.span()), Ident::new("succeeded", name.span()), Ident::new("Ready", name.span()), Ident::new("ready", name.span()))
-    } else if s.contains(&"Succeeded") {
-        (Ident::new("Ready", name.span()), Ident::new("ready", name.span()), Ident::new("Succeeded", name.span()), Ident::new("succeeded", name.span()))
-    } else {
-        panic!("ConditionType must contain either Ready or Succeeded variant")
-    };
+    // check if both happy variants exist on the enum
+    if required_variants.iter().all(|req| variant_strings.iter().any(|v| v == *req)) {
+         panic!("ConditionType may only contain one of either Ready or Succeeded variants")
+    }
 
-    let capitalized = capitalized.filter(|v| v.to_string() != "Ready" && v.to_string() != "Succeeded");
+    let happy = variants.iter().find(|v| required_variants.contains(&v.ident.to_string().as_str()))
+            .expect("ConditionType must contain either Ready or Succeeded variant");
+    let capitalized = variants.iter()
+        .map(|v| v.ident.clone())
+        .filter(|v| !required_variants.contains(&v.to_string().as_str()));
     let lower_case = capitalized.clone()
-        .map(|v| Ident::new(&format!("{}", v).to_lowercase(), v.span()));
+        .map(|v| Ident::new(&v.to_string().to_lowercase(), v.span()));
 
     quote! {
         impl #name {
@@ -52,35 +56,20 @@ pub fn derive(input: TokenStream) -> TokenStream {
             )*
         }
 
-        impl ::knative_conditions::ConditionType<#num_attrs> for #name {
-            //type Dependent = Self;
-
+        #[automatically_derived]
+        impl ::knative_conditions::ConditionType<#num_dependents> for #name {
             fn happy() -> Self {
-                #name::#existent
+                #name::#happy
             }
 
-            fn dependents() -> [Self; #num_attrs] {
-                [#(#name::#variants_with_attrs),*]
-            }
-
-            fn #existent_lower_case() -> Self {
-                #name::#existent
-            }
-
-            fn #non_existent_lower_case() -> Self {
-                panic!(stringify!(#name does not contain #non_existent))
+            fn dependents() -> [Self; #num_dependents] {
+                [#(#name::#dependents),*]
             }
         }
 
         impl Default for #name {
             fn default() -> Self {
-                #name::#existent
-            }
-        }
-
-        impl ::std::fmt::Display for #name {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                ::std::write!(f, "{:?}", self)
+                #name::#happy
             }
         }
     }.into()

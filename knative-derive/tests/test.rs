@@ -10,14 +10,8 @@ enum MyCondition {
 
 #[test]
 fn variant_functions_exist() {
-    assert_eq!(MyCondition::Ready, MyCondition::ready());
+    assert_eq!(MyCondition::Ready, MyCondition::happy());
     assert_eq!(MyCondition::SinkProvided, MyCondition::sinkprovided());
-}
-
-#[test]
-#[should_panic]
-fn succeeded_does_not_exist() {
-    MyCondition::succeeded();
 }
 
 #[test]
