@@ -125,7 +125,7 @@ pub trait SourceConditionType<const N:usize>: knative_conditions::ConditionType<
 
 impl SourceConditionType<1> for SourceCondition {
     fn sinkprovided() -> Self {
-        Self::sinkprovided()
+        Self::SinkProvided
     }
 }
 
