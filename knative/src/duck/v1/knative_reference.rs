@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{Error, DiscoveryError};
 use k8s_openapi::api::core::v1::ObjectReference;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -44,6 +44,7 @@ impl From<KReference> for ObjectReference {
 impl KReference {
     pub fn resolve_uri(&self, _client: kube::Client) -> Result<url::Url, Error> {
         let _object_reference: ObjectReference = self.clone().into();
-        unimplemented!("see knative.dev/pkg/resolver/addressable_resolver.go")
+        // unimplemented!("see knative.dev/pkg/resolver/addressable_resolver.go")
+        Err(Error::Discovery(DiscoveryError::ResolveKReferenceNotImplemented))
     }
 }
