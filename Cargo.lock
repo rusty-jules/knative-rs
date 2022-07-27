@@ -473,8 +473,6 @@ version = "0.1.0"
 dependencies = [
  "knative-conditions",
  "quote",
- "schemars",
- "serde",
  "syn",
 ]
 

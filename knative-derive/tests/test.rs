@@ -1,9 +1,7 @@
 use knative_derive::ConditionType;
 use knative_conditions::ConditionType as _;
-use serde::{Serialize, Deserialize};
-use schemars::JsonSchema;
 
-#[derive(ConditionType, Serialize, Deserialize, Clone, Copy, Debug, PartialEq, JsonSchema)]
+#[derive(ConditionType, Copy, Clone, Debug, PartialEq)]
 enum MyCondition {
     Ready,
     #[dependent]

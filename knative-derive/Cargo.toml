@@ -14,5 +14,3 @@ path = "tests/test.rs"
 quote = "1.0.20"
 syn = { version = "1.0.98", features = ["extra-traits"] }
 knative-conditions = { path = "../knative-conditions" }
-serde = { version = "1.0.140", features = ["derive"] }
-schemars = "0.8.10"
