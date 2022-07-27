@@ -67,6 +67,16 @@ impl Default for ConditionSeverity {
 pub struct Conditions<C, const N: usize>(Vec<Condition<C, N>>)
     where C: ConditionType<N>;
 
+impl<C, const N: usize> Default for Conditions<C, N> 
+where C: ConditionType<N> {
+    fn default() -> Self {
+        let mut conds = Vec::with_capacity(C::dependents().len() + 1);
+        conds.push(Condition::new(C::happy()));
+        conds.extend(C::dependents().into_iter().map(Condition::new));
+        Conditions(conds)
+    }
+}
+
 impl<C: ConditionType<N>, const N: usize> Deref for Conditions<C, N> {
     type Target = Vec<Condition<C, N>>;
     fn deref(&self) -> &Self::Target {
@@ -240,6 +250,13 @@ impl Default for ConditionStatus {
 }
 
 impl<C: ConditionType<N>, const N: usize> Condition<C, N> {
+    fn new(type_: C) -> Self {
+        Condition {
+            type_,
+            ..Default::default()
+        }
+    }
+
     fn is_true(&self) -> bool {
         self.status == ConditionStatus::True
     }
