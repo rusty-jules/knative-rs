@@ -109,9 +109,7 @@ pub struct SourceStatus<S: SourceConditionType<N>, const N: usize> {
 }
 
 /// A baseline ConditionType for SourceStatus.
-/// Custom conditions should implement [`SourceConditionType`]
-///
-/// [`SourceConditionType`]: ./.trait.SourceConditionType.html
+/// Custom conditions should implement [`SourceConditionType`].
 #[derive(crate::derive::ConditionType, Deserialize, Serialize, Copy, Clone, Debug, JsonSchema, PartialEq)]
 pub enum SourceCondition {
     Ready,
@@ -129,23 +127,18 @@ impl SourceConditionType<1> for SourceCondition {
     }
 }
 
-/// Allows a source status CR to manage its Conditions
+/// Allows a status to manage [`SourceConditionsType`].
 pub trait SourceManager<S: knative_conditions::ConditionType<N> + SourceConditionType<N>, const N: usize> {
     /// Return the conditions of your CRD Status type.
     fn conditions(&mut self) -> &mut Conditions<S, N>;
 
-    /// Return the SourceStatus of your CRD Status type.
+    /// Return the [`SourceStatus`] of your CRD Status type.
     fn source_status(&mut self) -> &mut SourceStatus<S, N>;
 
     /// Construct a [`ConditionManager`] of your dependent Conditions and the
     /// `Ready` or `Succeeded` status.
-    ///
-    /// [`ConditionManager`]: ../status_types/struct.ConditionManager.html
     fn manager(&mut self) -> ConditionManager<S, N> {
-        ConditionManager::new_living(
-            S::dependents(),
-            self.conditions()
-        )
+        ConditionManager::new(self.conditions())
     }
 
     /// Returns true if the resource is ready overall.

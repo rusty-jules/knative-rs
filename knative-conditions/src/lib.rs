@@ -3,11 +3,11 @@ use schemars::JsonSchema;
 use std::ops::{Deref, DerefMut};
 use std::fmt::Debug;
 
-/// ConditionSet defines how a set of Conditions
+/// Defines how the variants of a [`ConditionType`]
 /// depend on one another.
 pub struct ConditionSet<C: ConditionType<N>, const N: usize> {
-    pub happy: C,
-    pub dependents: [C; N],
+    happy: C,
+    dependents: [C; N],
 }
 
 impl<C, const N: usize> ConditionSet<C, N>
@@ -36,10 +36,6 @@ pub trait ConditionType<const N: usize>: Clone + Copy + Default + Debug +  Parti
             dependents: Self::dependents()
         }
     }
-
-    fn ready() -> Self { panic!() }
-
-    fn succeeded() -> Self { panic!() }
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug, JsonSchema, PartialEq)]
@@ -260,30 +256,22 @@ where C: ConditionType<N> {
 
 impl<'a, C, const N: usize> ConditionManager<'a, C, N>
 where C: ConditionType<N> {
-    /// Construct a new ConditionManager for long running resources.
-    pub fn new_living(dependents: [C; N], conditions: &'a mut Conditions<C, N>) -> Self {
-        Self::new(C::ready(), dependents, conditions)
-    }
-
-    /// Construct a new ConditionManager for resources that can complete.
-    pub fn new_batch(dependents: [C; N], conditions: &'a mut Conditions<C, N>) -> Self {
-        Self::new(C::succeeded(), dependents, conditions)
-    }
-
-    fn new(happy: C, dependents: [C; N], conditions: &'a mut Conditions<C, N>) -> Self {
+    pub fn new(conditions: &'a mut Conditions<C, N>) -> Self {
         assert!(
-            !dependents.contains(&happy),
-            "dependents may not contain happy condition: use Extension conditions only"
+            !C::dependents().contains(&C::happy()),
+            "dependents may not contain happy condition"
         );
-        let set = ConditionSet { happy, dependents };
-        ConditionManager { set, conditions }
+        ConditionManager {
+            set: C::as_set(),
+            conditions
+        }
     }
 
     pub fn get_condition(&self, condition_type: C) -> Option<&Condition<C, N>> {
         self.conditions.iter().find(|cond| cond.type_ == condition_type)
     }
 
-    /// Returns the happy condition.
+    /// Returns the happy [`Condition`].
     pub fn get_top_level_condition(&self) -> &Condition<C, N> {
         self.get_condition(self.set.happy)
             .as_ref()
@@ -298,7 +286,7 @@ where C: ConditionType<N> {
         self.get_top_level_condition().is_true()
     }
 
-    /// Whether the ConditionType determines happiness.
+    /// Whether the [`ConditionType`] determines happiness.
     fn is_terminal(&self, condition_type: &C) -> bool {
         self.set.is_terminal(&condition_type)
     }
@@ -373,8 +361,7 @@ where C: ConditionType<N> {
         // condition to unknown if this condition is a dependent
         if let Some(dependent) = self.find_unhappy_dependent() {
             if dependent.is_false() {
-                let happy = self.get_top_level_condition();
-                if !happy.is_false() {
+                if !self.get_top_level_condition().is_false() {
                     self.mark_false(self.set.happy, reason, message);
                }
             }
@@ -404,10 +391,6 @@ mod test {
         fn dependents() -> [Self; 1] {
             [TestCondition::SinkProvided]
         }
-
-        fn ready() -> Self {
-            TestCondition::Ready
-        }
     }
 
     impl Default for TestCondition {
@@ -421,7 +404,7 @@ mod test {
         let dt = chrono::Utc.ymd(2022, 1, 1);
         let mut conditions = Conditions(vec![
             Condition {
-                type_: TestCondition::ready(),
+                type_: TestCondition::Ready,
                 status: ConditionStatus::False,
                 last_transition_time: Some(dt.and_hms(0, 0, 0)),
                 ..Default::default()
@@ -445,14 +428,14 @@ mod test {
                 ..Default::default()
             },
             Condition {
-                type_: TestCondition::ready(),
+                type_: TestCondition::Ready,
                 status: ConditionStatus::False,
                 last_transition_time: Some(dt.and_hms(2, 0, 0)),
                 ..Default::default()
             }
         ]);
 
-        let mut manager = ConditionManager::new_living([TestCondition::SinkProvided], &mut conditions);
+        let mut manager = ConditionManager::new(&mut conditions);
         let unhappy = manager.find_unhappy_dependent().unwrap();
         // Returns most recent False dependent
         assert_eq!(unhappy.type_, TestCondition::SinkProvided);
