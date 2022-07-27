@@ -5,13 +5,25 @@ use std::fmt::Debug;
 
 /// Defines how the variants of a [`ConditionType`]
 /// depend on one another.
-pub struct ConditionSet<C: ConditionType<N>, const N: usize> {
+struct ConditionSet<C: ConditionType<N>, const N: usize> {
     happy: C,
     dependents: [C; N],
 }
 
 impl<C, const N: usize> ConditionSet<C, N>
 where C: ConditionType<N> {
+    fn new() -> Self {
+        assert!(
+            !C::dependents().contains(&C::happy()),
+            "dependents may not contain happy condition"
+        );
+
+        ConditionSet {
+            happy: C::happy(),
+            dependents: C::dependents()
+        }
+    }
+
     pub fn is_terminal(&self, condition_type: &C) -> bool {
         self.dependents.contains(&condition_type) || self.happy == *condition_type
     }
@@ -29,13 +41,6 @@ pub trait ConditionType<const N: usize>: Clone + Copy + Default + Debug +  Parti
     fn happy() -> Self;
 
     fn dependents() -> [Self; N];
-
-    fn as_set() -> ConditionSet<Self, N> {
-        ConditionSet {
-            happy: Self::happy(),
-            dependents: Self::dependents()
-        }
-    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug, JsonSchema, PartialEq)]
@@ -248,6 +253,41 @@ impl<C: ConditionType<N>, const N: usize> Condition<C, N> {
     }
 }
 
+pub trait ConditionAccessor<C: ConditionType<N>, const N: usize> {
+    /// Return the conditions of your CR status type.
+    fn conditions(&mut self) -> &mut Conditions<C, N>;
+
+    fn manager(&mut self) -> ConditionManager<C, N> {
+        ConditionManager::new(self.conditions())
+    }
+
+    /// Returns true if the resource is ready overall.
+    fn is_ready(&mut self) -> bool {
+        self.manager().is_happy()
+    }
+
+    fn mark_false(&mut self, reason: &str, message: Option<String>) {
+        let t = self.manager().get_top_level_condition().type_;
+        self.manager().mark_false(t, reason, message);
+    }
+
+    /// Set the condition that the source status is unknown. Typically used when beginning the
+    /// reconciliation of a new generation.
+    fn mark_unknown(&mut self) {
+        let t = self.manager().get_top_level_condition().type_;
+        self.manager().mark_unknown(
+            t,
+            "NewObservedGenFailure",
+            Some("unsuccessfully observed a new generation".into())
+        );
+    }
+
+    fn mark_unknown_with_message(&mut self, reason: &str, message: Option<String>) {
+        let t = self.manager().get_top_level_condition().type_;
+        self.manager().mark_unknown(t, reason, message);
+    }
+}
+
 pub struct ConditionManager<'a, C, const N: usize>
 where C: ConditionType<N> {
     set: ConditionSet<C, N>,
@@ -257,12 +297,8 @@ where C: ConditionType<N> {
 impl<'a, C, const N: usize> ConditionManager<'a, C, N>
 where C: ConditionType<N> {
     pub fn new(conditions: &'a mut Conditions<C, N>) -> Self {
-        assert!(
-            !C::dependents().contains(&C::happy()),
-            "dependents may not contain happy condition"
-        );
         ConditionManager {
-            set: C::as_set(),
+            set: ConditionSet::new(),
             conditions
         }
     }

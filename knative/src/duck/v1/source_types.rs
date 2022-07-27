@@ -3,7 +3,7 @@ use super::{
     knative_reference::KReference,
     status_types::Status,
 };
-use knative_conditions::{ConditionManager, Condition, Conditions};
+use knative_conditions::{ConditionAccessor, ConditionType, ConditionManager, Condition, Conditions};
 use crate::error::{DiscoveryError, Error};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -127,24 +127,31 @@ impl SourceConditionType<1> for SourceCondition {
     }
 }
 
-/// Allows a status to manage [`SourceConditionsType`].
-pub trait SourceManager<S: knative_conditions::ConditionType<N> + SourceConditionType<N>, const N: usize> {
-    /// Return the conditions of your CRD Status type.
-    fn conditions(&mut self) -> &mut Conditions<S, N>;
+impl<S, const N: usize> ConditionAccessor<S, N> for SourceStatus<S, N> 
+where S: ConditionType<N> + SourceConditionType<N> {
+    fn conditions(&mut self) -> &mut Conditions<S, N> {
+        match self.status.conditions {
+            Some(ref mut conditions) => conditions,
+            None => {
+                self.status.conditions = Some(Conditions::with_conditions(
+                    vec![
+                        Condition::default(),
+                        Condition {
+                            type_: S::sinkprovided(),
+                            ..Default::default()
+                        },
+                    ]));
+                self.conditions()
+            }
+        }
+    }
+}
 
+/// Allows a status to manage [`SourceStatus`].
+pub trait SinkManager<S, const N: usize>: ConditionAccessor<S, N>
+where S: ConditionType<N> + SourceConditionType<N> {
     /// Return the [`SourceStatus`] of your CRD Status type.
     fn source_status(&mut self) -> &mut SourceStatus<S, N>;
-
-    /// Construct a [`ConditionManager`] of your dependent Conditions and the
-    /// `Ready` or `Succeeded` status.
-    fn manager(&mut self) -> ConditionManager<S, N> {
-        ConditionManager::new(self.conditions())
-    }
-
-    /// Returns true if the resource is ready overall.
-    fn is_ready(&mut self) -> bool {
-        self.manager().is_happy()
-    }
 
     /// Set the condition that the source has a sink configured
     fn mark_sink(&mut self, uri: url::Url) {
@@ -157,38 +164,11 @@ pub trait SourceManager<S: knative_conditions::ConditionType<N> + SourceConditio
         self.source_status().sink_uri = None;
         self.manager().mark_false(S::sinkprovided(), reason, message);
     }
-
-    /// Set the condition that the source status is unknown. Typically used when beginning the
-    /// reconciliation of a new generation.
-    fn mark_unknown(&mut self) {
-        let t = self.manager().get_top_level_condition().type_;
-        self.manager().mark_unknown(
-            t,
-            "NewObservedGenFailure",
-            Some("unsuccessfully observed a new generation".into())
-        );
-    }
 }
 
-impl SourceManager<SourceCondition, 1> for SourceStatus<SourceCondition, 1> {
-    fn conditions(&mut self) -> &mut Conditions<SourceCondition, 1> {
-        match self.status.conditions {
-            Some(ref mut conditions) => conditions,
-            None => {
-                self.status.conditions = Some(Conditions::with_conditions(
-                    vec![
-                        Condition::default(),
-                        Condition {
-                            type_: SourceCondition::sinkprovided(),
-                            ..Default::default()
-                        },
-                    ]));
-                self.conditions()
-            }
-        }
-    }
-
-    fn source_status(&mut self) -> &mut SourceStatus<SourceCondition, 1> {
+impl<S, const N: usize> SinkManager<S, N> for SourceStatus<S, N> 
+where S: ConditionType<N> + SourceConditionType<N> {
+    fn source_status(&mut self) -> &mut SourceStatus<S, N> {
         self
     }
 }
@@ -201,4 +181,28 @@ pub struct CloudEventAttributes {
     #[serde(rename = "type")]
     type_: Option<String>,
     source: Option<String>,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    struct MyStatus {
+        source_status: SourceStatus<SourceCondition, 1>
+    }
+
+    impl Default for MyStatus {
+        fn default() -> MyStatus {
+            MyStatus {
+                source_status: SourceStatus::default()
+            }
+        }
+    }
+
+    #[test]
+    fn can_update_sink() {
+        let mut status = MyStatus::default();
+        status.source_status.mark_sinkprovided();
+        status.source_status.mark_sink("http://url".parse().unwrap());
+    }
 }
