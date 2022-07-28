@@ -3,7 +3,7 @@ use super::{
     knative_reference::KReference,
     status_types::Status,
 };
-use knative_conditions::{ConditionAccessor, ConditionType, Conditions};
+use knative_conditions::{ConditionAccessor, Conditions};
 use crate::error::{DiscoveryError, Error};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -88,6 +88,30 @@ pub struct CloudEventOverrides {
     pub extensions: Option<std::collections::BTreeMap<String, String>>,
 }
 
+/// CloudEventAttributes specifies the attributes that a Source
+/// uses as part of its CloudEvents.
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudEventAttributes {
+    #[serde(rename = "type")]
+    type_: Option<String>,
+    source: Option<String>,
+}
+
+/// A baseline [`ConditionType`] for [`SourceStatus`].
+///
+/// Custom conditions should implement [`SourceConditionType`] in order to be used by
+/// [`SourceStatus`].
+#[derive(crate::derive::ConditionType, Deserialize, Serialize, Copy, Clone, Debug, JsonSchema, PartialEq)]
+pub enum SourceCondition {
+    Ready,
+    /// A [`sink_uri`] has been set on the resource.
+    ///
+    /// [`sink_uri`]:./struct.SourceStatus.html#structfield.sink_uri
+    #[dependent]
+    SinkProvided
+}
+
 /// SourceStatus shows how we expect folks to embed Addressable in
 /// their Status field.
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
@@ -108,22 +132,7 @@ pub struct SourceStatus<S: SourceConditionType> {
     pub cloud_event_attributes: Option<Vec<CloudEventAttributes>>,
 }
 
-/// A baseline [`ConditionType`] for [`SourceStatus`].
-///
-/// Custom conditions should implement [`SourceConditionType`] in order to be used by
-/// [`SourceStatus`].
-#[derive(crate::derive::ConditionType, Deserialize, Serialize, Copy, Clone, Debug, JsonSchema, PartialEq)]
-pub enum SourceCondition {
-    Ready,
-    /// A [`sink_uri`] has been set on the resource.
-    ///
-    /// [`sink_uri`]:./struct.SourceStatus.html#structfield.sink_uri
-    #[dependent]
-    SinkProvided
-}
-
-impl<S> ConditionAccessor<S> for SourceStatus<S>
-where S: SourceConditionType {
+impl<S: SourceConditionType> ConditionAccessor<S> for SourceStatus<S> {
     fn conditions(&mut self) -> &mut Conditions<S> {
         self.status.conditions()
     }
@@ -134,8 +143,7 @@ where S: SourceConditionType {
 /// This traits helps to discourage use of the `*sinkprovided()` methods from
 /// [`SourceConditionManager`], which must be disambiguated when using a custom [`ConditionType`]
 /// that also has `*sinkprovided()` methods.
-pub trait SinkManager<S>: ConditionAccessor<S> + SourceConditionManager<S>
-where S: ConditionType + SourceConditionType {
+pub trait SinkManager<S: SourceConditionType>: SourceConditionManager<S> {
     /// Return the [`SourceStatus`] of your CRD Status type.
     fn source_status(&mut self) -> &mut SourceStatus<S>;
 
@@ -152,21 +160,10 @@ where S: ConditionType + SourceConditionType {
     }
 }
 
-impl<S> SinkManager<S> for SourceStatus<S>
-where S: ConditionType + SourceConditionType {
+impl<S: SourceConditionType> SinkManager<S> for SourceStatus<S> {
     fn source_status(&mut self) -> &mut SourceStatus<S> {
         self
     }
-}
-
-/// CloudEventAttributes specifies the attributes that a Source
-/// uses as part of its CloudEvents.
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct CloudEventAttributes {
-    #[serde(rename = "type")]
-    type_: Option<String>,
-    source: Option<String>,
 }
 
 #[cfg(test)]

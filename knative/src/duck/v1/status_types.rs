@@ -29,8 +29,7 @@ impl<C: ConditionType> Default for Status<C> {
     }
 }
 
-impl<C> ConditionAccessor<C> for Status<C>
-where C: ConditionType {
+impl<C: ConditionType> ConditionAccessor<C> for Status<C> {
     fn conditions(&mut self) -> &mut Conditions<C> {
         self.conditions.get_or_insert(Conditions::default())
     }

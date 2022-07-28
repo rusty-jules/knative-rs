@@ -4,7 +4,7 @@ use std::fmt::Debug;
 
 /// Enums that implement [`ConditionType`] can be used to differentiate [`Condition`]
 /// and describe the state of the resource.
-pub trait ConditionType: Clone + Copy + Default + Debug +  PartialEq
+pub trait ConditionType: Clone + Copy + Default + Debug + PartialEq
 where Self: 'static {
     /// The top-level variant that determines overall readiness of the resource.
     fn happy() -> Self;
@@ -188,11 +188,9 @@ impl<C: ConditionType> Condition<C> {
 
 /// A `Vec<Condition>` that maintains transition times.
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
-pub struct Conditions<C>(Vec<Condition<C>>)
-    where C: ConditionType;
+pub struct Conditions<C: ConditionType>(Vec<Condition<C>>);
 
-impl<C> Default for Conditions<C> 
-where C: ConditionType {
+impl<C: ConditionType> Default for Conditions<C> {
     fn default() -> Self {
         let iter = [C::happy()]
             .into_iter()
@@ -290,13 +288,11 @@ impl<C: ConditionType> Conditions<C> {
 
 /// Mutates [`Conditions`] in accordance with the condition dependency chain defined by a
 /// [`ConditionType`].
-pub struct ConditionManager<'a, C>
-where C: ConditionType {
+pub struct ConditionManager<'a, C: ConditionType> {
     conditions: &'a mut Conditions<C>,
 }
 
-impl<'a, C> ConditionManager<'a, C>
-where C: ConditionType {
+impl<'a, C: ConditionType> ConditionManager<'a, C> {
     pub fn new(conditions: &'a mut Conditions<C>) -> Self {
         assert!(
             !C::dependents().contains(&C::happy()),
