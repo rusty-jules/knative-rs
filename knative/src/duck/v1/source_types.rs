@@ -92,14 +92,14 @@ pub struct CloudEventOverrides {
 /// their Status field.
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct SourceStatus<S: SourceConditionType<N>, const N: usize> {
+pub struct SourceStatus<S: SourceConditionType> {
     /// inherits Status, which currently provides:
     /// * ObservedGeneration - the 'Generation' of the Service that was last
     ///   processed by the controller.
     /// * Conditions - the latest available observations of a resource's current
     ///   state.
     #[serde(flatten)]
-    pub status: Status<S, N>,
+    pub status: Status<S>,
     /// SinkURI is the current active sink URI that has been configured for the
     /// Source.
     pub sink_uri: Option<url::Url>,
@@ -121,9 +121,9 @@ pub enum SourceCondition {
     SinkProvided
 }
 
-impl<S, const N: usize> ConditionAccessor<S, N> for SourceStatus<S, N> 
-where S: SourceConditionType<N> {
-    fn conditions(&mut self) -> &mut Conditions<S, N> {
+impl<S> ConditionAccessor<S> for SourceStatus<S> 
+where S: SourceConditionType {
+    fn conditions(&mut self) -> &mut Conditions<S> {
         match self.status.conditions {
             Some(ref mut conditions) => conditions,
             None => {
@@ -135,10 +135,10 @@ where S: SourceConditionType<N> {
 }
 
 /// Allows a status to manage [`SourceStatus`].
-pub trait SinkManager<S, const N: usize>: ConditionAccessor<S, N> + SourceConditionManager<S, N>
-where S: ConditionType<N> + SourceConditionType<N> {
+pub trait SinkManager<S>: ConditionAccessor<S> + SourceConditionManager<S>
+where S: ConditionType + SourceConditionType {
     /// Return the [`SourceStatus`] of your CRD Status type.
-    fn source_status(&mut self) -> &mut SourceStatus<S, N>;
+    fn source_status(&mut self) -> &mut SourceStatus<S>;
 
     /// Set the condition that the source has a sink configured
     fn mark_sink(&mut self, uri: url::Url) {
@@ -153,9 +153,9 @@ where S: ConditionType<N> + SourceConditionType<N> {
     }
 }
 
-impl<S, const N: usize> SinkManager<S, N> for SourceStatus<S, N> 
-where S: ConditionType<N> + SourceConditionType<N> {
-    fn source_status(&mut self) -> &mut SourceStatus<S, N> {
+impl<S> SinkManager<S> for SourceStatus<S> 
+where S: ConditionType + SourceConditionType {
+    fn source_status(&mut self) -> &mut SourceStatus<S> {
         self
     }
 }
@@ -176,7 +176,7 @@ mod test {
     use crate::derive::ConditionType;
 
     struct MyStatus {
-        source_status: SourceStatus<SourceCondition, 1>
+        source_status: SourceStatus<SourceCondition>
     }
 
     #[test]
@@ -197,14 +197,14 @@ mod test {
         Unimportant
     }
 
-    impl SourceConditionType<2> for MyCondition {
+    impl SourceConditionType for MyCondition {
         fn sinkprovided() -> Self {
             MyCondition::SinkProvided
         }
     }
 
     struct MyCustomStatus {
-        source_status: SourceStatus<MyCondition, 2>
+        source_status: SourceStatus<MyCondition>
     }
 
     #[test]
