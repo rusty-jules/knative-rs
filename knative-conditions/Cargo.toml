@@ -3,6 +3,9 @@ name = "knative-conditions"
 version = "0.1.0"
 edition = "2021"
 authors = ["Julian Aichholz <julianaichholz@gmail.com>"]
+license = "Apache-2.0"
+repository = "https://github.com/rusty-jules/knative-rs"
+description = "Knative status condition types and management."
 
 [dependencies]
 chrono = { version = "0.4.19", features = ["serde"] }

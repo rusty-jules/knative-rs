@@ -3,10 +3,13 @@ name = "knative-eventing"
 version = "0.1.0"
 edition = "2021"
 authors = ["Julian Aichholz <julianaichholz@gmail.com>"]
+license = "Apache-2.0"
+repository = "https://github.com/rusty-jules/knative-rs"
+description = "Knative eventing custom resource definitions and objects."
 
 [dependencies]
 k8s-openapi = { version = "0.14.0", features = ["v1_22", "schemars"] }
-knative = { path = "../knative" }
+knative = { path = "../knative", version = "0.1.0" }
 kube = { version = "0.70.0", features = ["derive"] }
 schemars = { version = "0.8.8", features = ["chrono", "url"] }
 serde = { version = "1.0.136", features = ["derive"] }
