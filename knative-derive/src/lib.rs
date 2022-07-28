@@ -46,6 +46,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         .filter(|v| !required_variants.contains(&v.to_string().as_str()));
     let lower_case = capitalized.clone()
         .map(|v| Ident::new(&v.to_string().to_lowercase(), v.span()));
+    let lower_case_doc = capitalized.clone().map(|c| format!("Returns the `{c}` variant of the [`ConditionType`]"));
     let lower_case_again = lower_case.clone();
     let lower_case_again_again = lower_case.clone();
 
@@ -53,11 +54,15 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let mark_not = lower_case.clone().map(|l| Ident::new(&format!("mark_not_{l}"), l.span()));
 
     let condition_type_name = Ident::new(&format!("{name}Type"), name.span());
+    let condition_type_doc = format!("A [`ConditionType`] that implement this trait duck types to [`{name}`].");
     let manager_name = Ident::new(&format!("{name}Manager"), name.span());
+    let manager_doc = format!("Allows a status to manage [`{name}`].");
 
     quote! {
+            #[doc = #condition_type_doc]
             pub trait #condition_type_name: ::knative_conditions::ConditionType {
                 #(
+                    #[doc = #lower_case_doc]
                     fn #lower_case() -> Self;
                 )*
             }
@@ -88,7 +93,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
         }
 
-        /// Allows a status to manage [`#manager_name`]
+        #[doc = #manager_doc]
         pub trait #manager_name<S>: ::knative_conditions::ConditionAccessor<S>
         where S: #condition_type_name {
             #(

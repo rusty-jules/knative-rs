@@ -186,7 +186,7 @@ impl<C: ConditionType> Condition<C> {
     }
 }
 
-/// A [`Vec`] of [`Condition`] that maintains transition times.
+/// A `Vec<Condition>` that maintains transition times.
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
 pub struct Conditions<C>(Vec<Condition<C>>)
     where C: ConditionType;
@@ -210,7 +210,7 @@ impl<C: ConditionType> Conditions<C> {
         );
         assert!(
             conditions.iter().fold(std::collections::HashSet::new(), |mut acc, c| {
-                // insert the ConditionType as a string to avoid requiring C: Hashable
+                // insert the ConditionType as a string to avoid C: Hashable bound
                 acc.insert(format!("{:?}", c.type_));
                 acc
             }).len() == conditions.len(),
@@ -311,8 +311,8 @@ where C: ConditionType {
 
     /// Returns the happy [`Condition`].
     ///
-    /// ### Panic
-    /// *Panics* if the [`Conditions`] have not been properly initialized.
+    /// # Panic
+    /// Panics if the [`Conditions`] have not been properly initialized.
     /// See [`Conditions::default()`].
     pub fn get_top_level_condition(&self) -> &Condition<C> {
         self.get_condition(C::happy())

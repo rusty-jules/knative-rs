@@ -1,5 +1,8 @@
 use kube::CustomResource;
-use knative::duck::v1 as duckv1;
+use knative::duck::v1::{
+    source_types::{SourceSpec, SourceStatus, SourceCondition},
+    binding_types::BindingSpec,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -20,19 +23,19 @@ use serde::{Deserialize, Serialize};
 pub struct SinkBindingSpec {
     /// Sink and CloudEventOverrides
     #[serde(flatten)]
-    pub source_spec: duckv1::source_types::SourceSpec,
+    pub source_spec: SourceSpec,
     /// Subject
     #[serde(flatten)]
-    pub binding_spec: duckv1::binding_types::BindingSpec,
+    pub binding_spec: BindingSpec,
 }
 
-/// SinkBindingStatus communicates the observed state of the SinkBinding (from the controller).
+/// Communicates the observed state of the [`SinkBinding`] (from the controller).
 #[derive(Serialize, Deserialize, Debug, Clone, JsonSchema)]
 pub struct SinkBindingStatus {
-    /// inherits SourceStatus, which currently provides:
+    /// inherits [`SourceStatus`], which currently provides:
     /// * observed_generation
     /// * conditions
     /// * sink_uri
     #[serde(flatten)]
-    pub source_status: duckv1::source_types::SourceStatus<duckv1::source_types::SourceCondition>,
+    pub source_status: SourceStatus<SourceCondition>,
 }

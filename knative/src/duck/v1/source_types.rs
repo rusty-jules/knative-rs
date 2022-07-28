@@ -109,6 +109,7 @@ pub struct SourceStatus<S: SourceConditionType> {
 }
 
 /// A baseline [`ConditionType`] for [`SourceStatus`].
+///
 /// Custom conditions should implement [`SourceConditionType`] in order to be used by
 /// [`SourceStatus`].
 #[derive(crate::derive::ConditionType, Deserialize, Serialize, Copy, Clone, Debug, JsonSchema, PartialEq)]
@@ -128,7 +129,11 @@ where S: SourceConditionType {
     }
 }
 
-/// Allows a status to manage [`SourceStatus`].
+/// Provides management `sink_uri` on [`SourceStatus`].
+///
+/// This traits helps to discourage use of the `*sinkprovided()` methods from
+/// [`SourceConditionManager`], which must be disambiguated when using a custom [`ConditionType`]
+/// that also has `*sinkprovided()` methods.
 pub trait SinkManager<S>: ConditionAccessor<S> + SourceConditionManager<S>
 where S: ConditionType + SourceConditionType {
     /// Return the [`SourceStatus`] of your CRD Status type.
@@ -147,7 +152,7 @@ where S: ConditionType + SourceConditionType {
     }
 }
 
-impl<S> SinkManager<S> for SourceStatus<S> 
+impl<S> SinkManager<S> for SourceStatus<S>
 where S: ConditionType + SourceConditionType {
     fn source_status(&mut self) -> &mut SourceStatus<S> {
         self
