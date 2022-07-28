@@ -179,17 +179,11 @@ mod test {
         source_status: SourceStatus<SourceCondition, 1>
     }
 
-    impl Default for MyStatus {
-        fn default() -> MyStatus {
-            MyStatus {
-                source_status: SourceStatus::default()
-            }
-        }
-    }
-
     #[test]
     fn can_update_sink() {
-        let mut status = MyStatus::default();
+        let mut status = MyStatus {
+            source_status: SourceStatus::default()
+        };
         status.source_status.mark_sink("http://url".parse().unwrap());
     }
 
@@ -213,23 +207,19 @@ mod test {
         source_status: SourceStatus<MyCondition, 2>
     }
 
-    impl Default for MyCustomStatus {
-        fn default() -> MyCustomStatus {
-            MyCustomStatus {
-                source_status: SourceStatus::default()
-            }
-        }
-    }
-
     #[test]
     fn can_update_custom_sink() {
-        let mut status = MyCustomStatus::default();
+        let mut status = MyCustomStatus {
+            source_status: SourceStatus::default()
+        };
         status.source_status.mark_sink("http://url".parse().unwrap());
     }
 
     #[test]
     fn all_conditions_determine_ready() {
-        let mut status = MyCustomStatus::default();
+        let mut status = MyCustomStatus {
+            source_status: SourceStatus::default()
+        };
         let s = &mut status.source_status;
 
         assert_eq!(s.is_ready(), false);
@@ -263,7 +253,9 @@ mod test {
 
     #[test]
     fn can_update_custom_conditions() {
-        let mut status = MyCustomStatus::default();
+        let mut status = MyCustomStatus {
+            source_status: SourceStatus::default()
+        };
         let s = &mut status.source_status;
         s.manager()
             .mark_true_with_reason(
