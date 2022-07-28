@@ -98,22 +98,6 @@ impl ConditionSeverity {
     }
 }
 
-/// Ensure that a [`ConditionType`] dependency chain is DAG
-struct ConditionSet<C: ConditionType<N>, const N: usize> {
-    _marker: std::marker::PhantomData::<C>
-}
-
-impl<C, const N: usize> ConditionSet<C, N>
-where C: ConditionType<N> {
-    fn new() -> Self {
-        assert!(
-            !C::dependents().contains(&C::happy()),
-            "dependents may not contain happy condition"
-        );
-        ConditionSet { _marker: std::marker::PhantomData }
-    }
-}
-
 /// A custom resource status condition.
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, PartialEq)]
 pub struct Condition<C: ConditionType<N>, const N: usize> {
@@ -302,8 +286,10 @@ where C: ConditionType<N> {
 impl<'a, C, const N: usize> ConditionManager<'a, C, N>
 where C: ConditionType<N> {
     pub fn new(conditions: &'a mut Conditions<C, N>) -> Self {
-        // ConditionSet is only being used to assert that the condition dependency chain is a DAG
-        ConditionSet::<C, N>::new();
+        assert!(
+            !C::dependents().contains(&C::happy()),
+            "dependents may not contain happy condition"
+        );
         ConditionManager { conditions }
     }
 
