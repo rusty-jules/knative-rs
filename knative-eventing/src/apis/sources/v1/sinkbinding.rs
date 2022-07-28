@@ -1,5 +1,5 @@
 use kube::CustomResource;
-use knative::duck::v1::{
+use knative::{
     source_types::{SourceSpec, SourceStatus, SourceCondition},
     binding_types::BindingSpec,
 };

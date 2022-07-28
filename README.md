@@ -11,7 +11,7 @@ use schemars::JsonSchema;
 use serde::{Serialize, Deserialize};
 use kube::{Api, CustomResource, Resource, ResourceExt};
 use kube::runtime::controller::{Action, Context};
-use knative::duck::v1::source_types::{
+use knative::source_types::{
     SourceSpec,
     SourceStatus,
     SourceCondition,
