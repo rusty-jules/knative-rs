@@ -133,40 +133,30 @@ impl<C: ConditionType<N>, const N: usize> Conditions<C, N> {
     }
 
     fn mark_true(&mut self, condition_type: C) {
-        self.set_cond(Condition {
-            type_: condition_type,
-            status: ConditionStatus::True,
-            ..Default::default()
-        })
+        self.set_cond(Condition::with_status(condition_type, ConditionStatus::True))
     }
 
     fn mark_true_with_reason(&mut self, condition_type: C, reason: String, message: Option<String>) {
         self.set_cond(Condition {
-            type_: condition_type,
-            status: ConditionStatus::True,
             reason: Some(reason),
             message,
-            ..Default::default()
+            ..Condition::with_status(condition_type, ConditionStatus::True)
         })
     }
 
     fn mark_false(&mut self, condition_type: C, reason: String, message: Option<String>) {
         self.set_cond(Condition {
-            type_: condition_type,
-            status: ConditionStatus::False,
             reason: Some(reason),
             message,
-            ..Default::default()
+            ..Condition::with_status(condition_type, ConditionStatus::False)
         });
     }
 
     fn mark_unknown(&mut self, condition_type: C, reason: String, message: Option<String>) {
         self.set_cond(Condition {
-            type_: condition_type,
-            status: ConditionStatus::Unknown,
             reason: Some(reason),
             message,
-            ..Default::default()
+            ..Condition::with_status(condition_type, ConditionStatus::Unknown)
         });
     }
 }
@@ -245,6 +235,13 @@ impl<C: ConditionType<N>, const N: usize> Condition<C, N> {
         Condition {
             type_,
             ..Default::default()
+        }
+    }
+
+    fn with_status(type_: C, status: ConditionStatus) -> Condition<C, N> {
+        Condition {
+            status,
+            ..Condition::new(type_)
         }
     }
 
