@@ -208,6 +208,14 @@ impl<C: ConditionType> Conditions<C> {
             conditions.iter().any(|c| c.type_ == C::happy()),
             "Conditions must be initialized with the happy ConditionType"
         );
+        assert!(
+            conditions.iter().fold(std::collections::HashSet::new(), |mut acc, c| {
+                // insert the ConditionType as a string to avoid requiring C: Hashable
+                acc.insert(format!("{:?}", c.type_));
+                acc
+            }).len() == conditions.len(),
+            "ConditionType must be unique to each Condition"
+        );
         Conditions(conditions)
     }
 
@@ -398,7 +406,9 @@ mod test {
     #[derive(Deserialize, Copy, Clone, Debug, PartialEq)]
     enum TestCondition {
         Ready,
-        SinkProvided
+        SinkProvided,
+        OtherCondition,
+        Unimportant
     }
 
     impl ConditionType for TestCondition {
@@ -407,7 +417,7 @@ mod test {
         }
 
         fn dependents() -> &'static [Self] {
-            &[TestCondition::SinkProvided]
+            &[TestCondition::SinkProvided, TestCondition::OtherCondition]
         }
     }
 
@@ -420,7 +430,7 @@ mod test {
     #[test]
     fn find_unhappy_dependent_does_not_sort_vec() {
         let dt = chrono::Utc.ymd(2022, 1, 1);
-        let mut conditions = Conditions(vec![
+        let mut conditions = Conditions::with_conditions(vec![
             Condition {
                 type_: TestCondition::Ready,
                 status: ConditionStatus::False,
@@ -430,27 +440,21 @@ mod test {
             Condition {
                 type_: TestCondition::SinkProvided,
                 status: ConditionStatus::False,
-                last_transition_time: Some(dt.and_hms(1, 0, 0)),
-                ..Default::default()
-            },
-            Condition {
-                type_: TestCondition::SinkProvided,
-                status: ConditionStatus::Unknown,
-                last_transition_time: Some(dt.and_hms(2, 0, 0)),
-                ..Default::default()
-            },
-            Condition {
-                type_: TestCondition::SinkProvided,
-                status: ConditionStatus::False,
                 last_transition_time: Some(dt.and_hms(3, 0, 0)),
                 ..Default::default()
             },
             Condition {
-                type_: TestCondition::Ready,
+                type_: TestCondition::OtherCondition,
                 status: ConditionStatus::False,
                 last_transition_time: Some(dt.and_hms(2, 0, 0)),
                 ..Default::default()
-            }
+            },
+            Condition {
+                type_: TestCondition::Unimportant,
+                status: ConditionStatus::False,
+                last_transition_time: Some(dt.and_hms(2, 0, 0)),
+                ..Default::default()
+            },
         ]);
 
         let manager = ConditionManager::new(&mut conditions);
@@ -463,9 +467,8 @@ mod test {
         let mut iter = conditions.0.iter();
         assert_eq!(iter.next().unwrap().type_, TestCondition::Ready);
         assert_eq!(iter.next().unwrap().type_, TestCondition::SinkProvided);
-        assert_eq!(iter.next().unwrap().type_, TestCondition::SinkProvided);
-        assert_eq!(iter.next().unwrap().type_, TestCondition::SinkProvided);
-        assert_eq!(iter.next().unwrap().type_, TestCondition::Ready);
+        assert_eq!(iter.next().unwrap().type_, TestCondition::OtherCondition);
+        assert_eq!(iter.next().unwrap().type_, TestCondition::Unimportant);
     }
 
     #[test]
