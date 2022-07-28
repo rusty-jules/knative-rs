@@ -1,11 +1,22 @@
 use knative_derive::ConditionType;
 use knative_conditions::ConditionType as _;
+use knative_conditions::{ConditionAccessor, Conditions};
 
 #[derive(ConditionType, Copy, Clone, Debug, PartialEq)]
 enum MyCondition {
     Ready,
     #[dependent]
     SinkProvided
+}
+
+struct MyStatus {
+    conditions: Conditions<MyCondition, 1>
+}
+
+impl ConditionAccessor<MyCondition, 1> for MyStatus {
+    fn conditions(&mut self) -> &mut Conditions<MyCondition, 1> {
+        &mut self.conditions
+    }
 }
 
 #[test]
@@ -17,4 +28,10 @@ fn variant_functions_exist() {
 #[test]
 fn has_dependents() {
     assert_eq!([MyCondition::SinkProvided], MyCondition::dependents());
+}
+
+#[test]
+fn can_be_managed() {
+    let mut status = MyStatus { conditions: Conditions::default() };
+    status.mark_sinkprovided();
 }
