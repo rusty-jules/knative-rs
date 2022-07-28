@@ -75,10 +75,11 @@ pub struct Conditions<C, const N: usize>(Vec<Condition<C, N>>)
 impl<C, const N: usize> Default for Conditions<C, N> 
 where C: ConditionType<N> {
     fn default() -> Self {
-        let mut conds = Vec::with_capacity(C::dependents().len() + 1);
-        conds.push(Condition::new(C::happy()));
-        conds.extend(C::dependents().into_iter().map(Condition::new));
-        Conditions(conds)
+        let iter = [C::happy()]
+            .into_iter()
+            .chain(C::dependents())
+            .map(Condition::new);
+        Conditions(Vec::from_iter(iter))
     }
 }
 
@@ -414,7 +415,6 @@ where C: ConditionType<N> {
            self.conditions.mark_unknown(self.set.happy, reason.to_string(), message);
         }
     }
-
 }
 
 #[cfg(test)]
