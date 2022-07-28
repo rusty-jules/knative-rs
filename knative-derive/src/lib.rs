@@ -51,6 +51,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let lower_case_again_again = lower_case.clone();
 
     let mark = lower_case.clone().map(|l| Ident::new(&format!("mark_{l}"), l.span()));
+    let mark_with_reason = lower_case.clone().map(|l| Ident::new(&format!("mark_{l}_with_reason"), l.span()));
     let mark_not = lower_case.clone().map(|l| Ident::new(&format!("mark_not_{l}"), l.span()));
 
     let condition_type_name = Ident::new(&format!("{name}Type"), name.span());
@@ -99,6 +100,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
             #(
                 fn #mark(&mut self) {
                     self.manager().mark_true(S::#lower_case_again_again());
+                }
+
+                fn #mark_with_reason(&mut self, reason: &str, message: Option<String>) {
+                    self.manager().mark_true_with_reason(S::#lower_case_again_again(), reason, message);
                 }
 
                 fn #mark_not(&mut self, reason: &str, message: Option<String>) {
