@@ -1,7 +1,3 @@
-//! Derive [`ConditionType`] on your own types to adhere to the Knative Source schema and condition
-//! management. Derives [`Default`] on your type, which must be the happy condition.
-//!
-//! [`ConditionType`]: ../knative_conditions/trait.ConditionType.html
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
@@ -11,6 +7,30 @@ use syn::{
     Ident
 };
 
+/// Derive [`knative_conditions::ConditionType`] on your own `enum` to adhere to the Knative Source schema and condition
+/// management.
+///
+/// Automatically implements [`Default`] on your type, which must be the top level condition.
+///
+/// # Example
+/// ```rust
+/// use knative_derive::ConditionType;
+///
+/// #[derive(ConditionType, Debug, Copy, Clone, PartialEq)]
+/// enum MyCondition {
+///   // First condition must be Ready or Succeeded
+///   Ready,
+///   // Use the dependent attribute to mark conditions
+///   // that are required to consider the resource ready
+///   #[dependent]
+///   SinkProvided,
+///   #[dependent]
+///   Important,
+///   // Conditions that are not marked dependent do not
+///   // determine overall resource readiness
+///   Informational,
+/// }
+/// ```
 #[proc_macro_derive(ConditionType, attributes(dependent))]
 pub fn derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
@@ -60,22 +80,22 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let manager_doc = format!("Allows a status to manage [`{name}`].");
 
     quote! {
-            #[doc = #condition_type_doc]
-            pub trait #condition_type_name: ::knative_conditions::ConditionType {
-                #(
-                    #[doc = #lower_case_doc]
-                    fn #lower_case() -> Self;
-                )*
-            }
+        #[doc = #condition_type_doc]
+        pub trait #condition_type_name: ::knative_conditions::ConditionType {
+            #(
+                #[doc = #lower_case_doc]
+                fn #lower_case() -> Self;
+            )*
+        }
 
-            #[automatically_derived]
-            impl #condition_type_name for #name {
-                #(
-                    fn #lower_case_again() -> Self {
-                        #name::#capitalized
-                    }
-                )*
-            }
+        #[automatically_derived]
+        impl #condition_type_name for #name {
+            #(
+                fn #lower_case_again() -> Self {
+                    #name::#capitalized
+                }
+            )*
+        }
 
         #[automatically_derived]
         impl ::knative_conditions::ConditionType for #name {
@@ -88,6 +108,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
         }
 
+        #[automatically_derived]
         impl Default for #name {
             fn default() -> Self {
                 #name::#happy

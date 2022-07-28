@@ -4,6 +4,7 @@ use super::{
     status_types::Status,
 };
 use knative_conditions::{ConditionAccessor, Conditions};
+use crate::derive::ConditionType;
 use crate::error::{DiscoveryError, Error};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -102,7 +103,7 @@ pub struct CloudEventAttributes {
 ///
 /// Custom conditions should implement [`SourceConditionType`] in order to be used by
 /// [`SourceStatus`].
-#[derive(crate::derive::ConditionType, Deserialize, Serialize, Copy, Clone, Debug, JsonSchema, PartialEq)]
+#[derive(ConditionType, Deserialize, Serialize, Copy, Clone, Debug, JsonSchema, PartialEq)]
 pub enum SourceCondition {
     Ready,
     /// A [`sink_uri`] has been set on the resource.
