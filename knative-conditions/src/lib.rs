@@ -4,17 +4,21 @@ use std::fmt::Debug;
 
 /// Enums that implement [`ConditionType`] can be used to differentiate [`Condition`]
 /// and describe the state of the resource.
-pub trait ConditionType<const N: usize>: Clone + Copy + Default + Debug +  PartialEq {
+pub trait ConditionType: Clone + Copy + Default + Debug +  PartialEq
+where Self: 'static {
     /// The top-level variant that determines overall readiness of the resource.
     fn happy() -> Self;
+
     /// Variants that must be true to consider the happy condition true.
-    fn dependents() -> [Self; N];
+    fn dependents() -> &'static [Self];
 
     /// Whether the [`ConditionType`] determines happiness.
     fn is_terminal(&self) -> bool {
         Self::dependents().contains(self) || *self == Self::happy()
     }
 
+    /// A [`Condition`] severity defaults to whether it determines overall resource readiness or
+    /// not.
     fn severity(&self) -> ConditionSeverity {
         if self.is_terminal() {
             ConditionSeverity::Error
@@ -26,12 +30,12 @@ pub trait ConditionType<const N: usize>: Clone + Copy + Default + Debug +  Parti
 
 /// Provides [`ConditionManager`] access to the [`Conditions`],
 /// and exposes control of the top-level [`Condition`].
-pub trait ConditionAccessor<C: ConditionType<N>, const N: usize> {
+pub trait ConditionAccessor<C: ConditionType> {
     /// Return the conditions of your CR status type.
-    fn conditions(&mut self) -> &mut Conditions<C, N>;
+    fn conditions(&mut self) -> &mut Conditions<C>;
 
     /// Returns a [`ConditionManager`] for more fine-grained control of [`Conditions`].
-    fn manager(&mut self) -> ConditionManager<C, N> {
+    fn manager(&mut self) -> ConditionManager<C> {
         ConditionManager::new(self.conditions())
     }
 
@@ -100,7 +104,7 @@ impl ConditionSeverity {
 
 /// A custom resource status condition.
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, PartialEq)]
-pub struct Condition<C: ConditionType<N>, const N: usize> {
+pub struct Condition<C: ConditionType> {
     #[serde(rename = "type")]
     pub type_: C,
     pub status: ConditionStatus,
@@ -119,8 +123,8 @@ pub struct Condition<C: ConditionType<N>, const N: usize> {
     pub message: Option<String>,
 }
 
-impl<C: ConditionType<N>, const N: usize> Default for Condition<C, N> {
-    fn default() -> Condition<C, N> {
+impl<C: ConditionType> Default for Condition<C> {
+    fn default() -> Condition<C> {
         Condition {
             type_: C::default(),
             status: ConditionStatus::default(),
@@ -132,7 +136,7 @@ impl<C: ConditionType<N>, const N: usize> Default for Condition<C, N> {
     }
 }
 
-impl<C: ConditionType<N>, const N: usize> PartialOrd for Condition<C, N> {
+impl<C: ConditionType> PartialOrd for Condition<C> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         use ConditionStatus::*;
         use std::cmp::Ordering;
@@ -153,7 +157,7 @@ impl<C: ConditionType<N>, const N: usize> PartialOrd for Condition<C, N> {
     }
 }
 
-impl<C: ConditionType<N>, const N: usize> Condition<C, N> {
+impl<C: ConditionType> Condition<C> {
     fn new(type_: C) -> Self {
         Condition {
             type_,
@@ -161,7 +165,7 @@ impl<C: ConditionType<N>, const N: usize> Condition<C, N> {
         }
     }
 
-    fn with_status(type_: C, status: ConditionStatus) -> Condition<C, N> {
+    fn with_status(type_: C, status: ConditionStatus) -> Condition<C> {
         Condition {
             status,
             ..Condition::new(type_)
@@ -184,22 +188,22 @@ impl<C: ConditionType<N>, const N: usize> Condition<C, N> {
 
 /// A [`Vec`] of [`Condition`] that maintains transition times.
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
-pub struct Conditions<C, const N: usize>(Vec<Condition<C, N>>)
-    where C: ConditionType<N>;
+pub struct Conditions<C>(Vec<Condition<C>>)
+    where C: ConditionType;
 
-impl<C, const N: usize> Default for Conditions<C, N> 
-where C: ConditionType<N> {
+impl<C> Default for Conditions<C> 
+where C: ConditionType {
     fn default() -> Self {
         let iter = [C::happy()]
             .into_iter()
-            .chain(C::dependents())
+            .chain(C::dependents().iter().cloned())
             .map(Condition::new);
         Conditions(Vec::from_iter(iter))
     }
 }
 
-impl<C: ConditionType<N>, const N: usize> Conditions<C, N> {
-    pub fn with_conditions(conditions: Vec<Condition<C, N>>) -> Conditions<C, N> {
+impl<C: ConditionType> Conditions<C> {
+    pub fn with_conditions(conditions: Vec<Condition<C>>) -> Conditions<C> {
         assert!(
             conditions.iter().any(|c| c.type_ == C::happy()),
             "Conditions must be initialized with the happy ConditionType"
@@ -207,15 +211,15 @@ impl<C: ConditionType<N>, const N: usize> Conditions<C, N> {
         Conditions(conditions)
     }
 
-    fn get_cond(&self, type_: &C) -> Option<&Condition<C, N>> {
+    fn get_cond(&self, type_: &C) -> Option<&Condition<C>> {
         self.0.iter().find(|c| c.type_ == *type_)
     }
 
-    fn get_cond_mut(&mut self, type_: &C) -> Option<&mut Condition<C, N>> {
+    fn get_cond_mut(&mut self, type_: &C) -> Option<&mut Condition<C>> {
         self.0.iter_mut().find(|c| c.type_ == *type_)
     }
 
-    fn set_cond(&mut self, mut condition: Condition<C, N>) {
+    fn set_cond(&mut self, mut condition: Condition<C>) {
         // The go version collects all the conditions of different type != arg
         // into a new array, then checks if only the time has changed
         // on the condition to set. If so it returns, otherwise
@@ -278,14 +282,14 @@ impl<C: ConditionType<N>, const N: usize> Conditions<C, N> {
 
 /// Mutates [`Conditions`] in accordance with the condition dependency chain defined by a
 /// [`ConditionType`].
-pub struct ConditionManager<'a, C, const N: usize>
-where C: ConditionType<N> {
-    conditions: &'a mut Conditions<C, N>,
+pub struct ConditionManager<'a, C>
+where C: ConditionType {
+    conditions: &'a mut Conditions<C>,
 }
 
-impl<'a, C, const N: usize> ConditionManager<'a, C, N>
-where C: ConditionType<N> {
-    pub fn new(conditions: &'a mut Conditions<C, N>) -> Self {
+impl<'a, C> ConditionManager<'a, C>
+where C: ConditionType {
+    pub fn new(conditions: &'a mut Conditions<C>) -> Self {
         assert!(
             !C::dependents().contains(&C::happy()),
             "dependents may not contain happy condition"
@@ -293,7 +297,7 @@ where C: ConditionType<N> {
         ConditionManager { conditions }
     }
 
-    pub fn get_condition(&self, condition_type: C) -> Option<&Condition<C, N>> {
+    pub fn get_condition(&self, condition_type: C) -> Option<&Condition<C>> {
         self.conditions.get_cond(&condition_type)
     }
 
@@ -302,7 +306,7 @@ where C: ConditionType<N> {
     /// ### Panic
     /// *Panics* if the [`Conditions`] have not been properly initialized.
     /// See [`Conditions::default()`].
-    pub fn get_top_level_condition(&self) -> &Condition<C, N> {
+    pub fn get_top_level_condition(&self) -> &Condition<C> {
         self.get_condition(C::happy())
             .as_ref()
             .expect("top level condition is initialized")
@@ -312,7 +316,7 @@ where C: ConditionType<N> {
         self.get_top_level_condition().is_true()
     }
 
-    fn find_unhappy_dependent(&self) -> Option<&Condition<C, N>> {
+    fn find_unhappy_dependent(&self) -> Option<&Condition<C>> {
         self.conditions.0
             .iter()
             // Filter to non-true, terminal dependents
@@ -397,13 +401,13 @@ mod test {
         SinkProvided
     }
 
-    impl ConditionType<1> for TestCondition {
+    impl ConditionType for TestCondition {
         fn happy() -> Self {
             TestCondition::Ready
         }
 
-        fn dependents() -> [Self; 1] {
-            [TestCondition::SinkProvided]
+        fn dependents() -> &'static [Self] {
+            &[TestCondition::SinkProvided]
         }
     }
 

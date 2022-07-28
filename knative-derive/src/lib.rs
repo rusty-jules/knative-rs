@@ -26,7 +26,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
         .filter(|v| v.attrs.iter().any(|a| a.path.segments.iter().any(|p| p.ident == "dependent")))
         .map(|v| v.ident);
     let dependents_again = dependents.clone();
-    let num_dependents: usize = dependents.clone().count();
 
     let variant_strings: Vec<String> = variants.iter().map(|v| v.ident.to_string()).collect();
     let dependent_strings: Vec<String> = dependents.clone().map(|d| d.to_string()).collect();
@@ -57,14 +56,14 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let manager_name = Ident::new(&format!("{name}Manager"), name.span());
 
     quote! {
-            pub trait #condition_type_name<const N: usize>: ::knative_conditions::ConditionType<N> {
+            pub trait #condition_type_name: ::knative_conditions::ConditionType {
                 #(
                     fn #lower_case() -> Self;
                 )*
             }
 
             #[automatically_derived]
-            impl #condition_type_name<#num_dependents> for #name {
+            impl #condition_type_name for #name {
                 #(
                     fn #lower_case_again() -> Self {
                         #name::#capitalized
@@ -73,13 +72,13 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
 
         #[automatically_derived]
-        impl ::knative_conditions::ConditionType<#num_dependents> for #name {
+        impl ::knative_conditions::ConditionType for #name {
             fn happy() -> Self {
                 #name::#happy
             }
 
-            fn dependents() -> [Self; #num_dependents] {
-                [#(#name::#dependents_again),*]
+            fn dependents() -> &'static [Self] {
+                &[#(#name::#dependents_again),*]
             }
         }
 
@@ -90,8 +89,8 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
 
         /// Allows a status to manage [`#manager_name`]
-        pub trait #manager_name<S, const N: usize>: ::knative_conditions::ConditionAccessor<S, N>
-        where S: #condition_type_name<N> {
+        pub trait #manager_name<S>: ::knative_conditions::ConditionAccessor<S>
+        where S: #condition_type_name {
             #(
                 fn #mark(&mut self) {
                     self.manager().mark_true(S::#lower_case_again_again());
@@ -103,7 +102,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
             )*
         }
 
-        impl<S: #condition_type_name<N>, const N: usize, T: ::knative_conditions::ConditionAccessor<S, N> + ?Sized> #manager_name<S, N> for T {}
+        impl<S: #condition_type_name, T: ::knative_conditions::ConditionAccessor<S> + ?Sized> #manager_name<S> for T {}
     }.into()
 }
 

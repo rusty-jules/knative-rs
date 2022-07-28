@@ -10,11 +10,11 @@ enum MyCondition {
 }
 
 struct MyStatus {
-    conditions: Conditions<MyCondition, 1>
+    conditions: Conditions<MyCondition>
 }
 
-impl ConditionAccessor<MyCondition, 1> for MyStatus {
-    fn conditions(&mut self) -> &mut Conditions<MyCondition, 1> {
+impl ConditionAccessor<MyCondition> for MyStatus {
+    fn conditions(&mut self) -> &mut Conditions<MyCondition> {
         &mut self.conditions
     }
 }
