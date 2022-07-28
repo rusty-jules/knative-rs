@@ -1,6 +1,89 @@
-use serde::{Serialize, Deserialize};
 use schemars::JsonSchema;
+use serde::{Serialize, Deserialize};
 use std::fmt::Debug;
+
+/// Enums that implement [`ConditionType`] can be used to differentiate [`Condition`]
+/// and describe the state of the resource.
+pub trait ConditionType<const N: usize>: Clone + Copy + Default + Debug +  PartialEq {
+    /// The top-level variant that determines overall readiness of the resource.
+    fn happy() -> Self;
+    /// Variants that must be true to consider the happy condition true.
+    fn dependents() -> [Self; N];
+}
+
+/// Provides [`ConditionManager`] access to the [`Conditions`],
+/// and exposes control of the top-level [`Condition`].
+pub trait ConditionAccessor<C: ConditionType<N>, const N: usize> {
+    /// Return the conditions of your CR status type.
+    fn conditions(&mut self) -> &mut Conditions<C, N>;
+
+    /// Returns a [`ConditionManager`] for more fine-grained control of [`Conditions`].
+    fn manager(&mut self) -> ConditionManager<C, N> {
+        ConditionManager::new(self.conditions())
+    }
+
+    /// Returns true if the resource is ready overall.
+    fn is_ready(&mut self) -> bool {
+        self.manager().is_happy()
+    }
+
+    /// Set the status of the top level condition type to false
+    fn mark_false(&mut self, reason: &str, message: Option<String>) {
+        let t = self.manager().get_top_level_condition().type_;
+        self.manager().mark_false(t, reason, message);
+    }
+
+    /// Set the status of the top level condition to unknown. Typically used when beginning the
+    /// reconciliation of a new generation.
+    fn mark_unknown(&mut self) {
+        let t = self.manager().get_top_level_condition().type_;
+        self.manager().mark_unknown(
+            t,
+            "NewObservedGenFailure",
+            Some("unsuccessfully observed a new generation".into())
+        );
+    }
+
+    fn mark_unknown_with_message(&mut self, reason: &str, message: Option<String>) {
+        let t = self.manager().get_top_level_condition().type_;
+        self.manager().mark_unknown(t, reason, message);
+    }
+}
+
+/// The state of a [`Condition`].
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, JsonSchema, PartialEq)]
+pub enum ConditionStatus {
+    True,
+    False,
+    Unknown,
+}
+
+impl Default for ConditionStatus {
+    fn default() -> Self {
+        ConditionStatus::Unknown
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, JsonSchema, PartialEq)]
+#[non_exhaustive]
+/// The importance of a conditions status.
+pub enum ConditionSeverity {
+    Error,
+    Warning,
+    Info,
+}
+
+impl Default for ConditionSeverity {
+    fn default() -> Self {
+        ConditionSeverity::Error
+    }
+}
+
+impl ConditionSeverity {
+    pub fn is_err(&self) -> bool {
+        *self == ConditionSeverity::Error
+    }
+}
 
 /// Defines how the variants of a [`ConditionType`]
 /// depend on one another.
@@ -37,33 +120,87 @@ where C: ConditionType<N> {
     }
 }
 
-/// Enums that implement [`ConditionType`] can be used to differentiate [`Condition`]
-/// and describe the state of the resource.
-pub trait ConditionType<const N: usize>: Clone + Copy + Default + Debug +  PartialEq {
-    /// The top-level variant that determines overall readiness of the resource.
-    fn happy() -> Self;
-    /// Variants that must be true to consider the happy condition true.
-    fn dependents() -> [Self; N];
+/// A custom resource status condition.
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, PartialEq)]
+pub struct Condition<C: ConditionType<N>, const N: usize> {
+    #[serde(rename = "type")]
+    pub type_: C,
+    pub status: ConditionStatus,
+    /// ConditionSeverityError specifies that a failure of a condition type
+    /// should be viewed as an error.  As "Error" is the default for conditions
+    /// we use the empty string (coupled with omitempty) to avoid confusion in
+    /// the case where the condition is in state "True" (aka nothing is wrong).
+    // In rust lang we accomplish this with Error as a Default variant
+    #[serde(default)]
+    #[serde(skip_serializing_if = "ConditionSeverity::is_err")]
+    pub severity: ConditionSeverity,
+    // TODO: make this a "VolatileTime"
+    //#[serde(deserialize_with = "from_ts")]
+    pub last_transition_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub reason: Option<String>,
+    pub message: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, JsonSchema, PartialEq)]
-#[non_exhaustive]
-/// The importance of a conditions status.
-pub enum ConditionSeverity {
-    Error,
-    Warning,
-    Info,
-}
-
-impl ConditionSeverity {
-    pub fn is_err(&self) -> bool {
-        *self == ConditionSeverity::Error
+impl<C: ConditionType<N>, const N: usize> Default for Condition<C, N> {
+    fn default() -> Condition<C, N> {
+        Condition {
+            type_: C::default(),
+            status: ConditionStatus::default(),
+            severity: ConditionSeverity::default(),
+            last_transition_time: Some(chrono::Utc::now()),
+            reason: None,
+            message: None
+        }
     }
 }
 
-impl Default for ConditionSeverity {
-    fn default() -> Self {
-        ConditionSeverity::Error
+impl<C: ConditionType<N>, const N: usize> PartialOrd for Condition<C, N> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use ConditionStatus::*;
+        use std::cmp::Ordering;
+
+        let time_ord = match (self.last_transition_time, other.last_transition_time) {
+            (Some(left), Some(right)) => left.partial_cmp(&right),
+            _ => None
+        };
+
+        match (self.status, other.status) {
+            (False, False) | (Unknown, Unknown) | (True, True) => match time_ord {
+                Some(ord) => Some(ord),
+                None => Some(Ordering::Equal)
+            },
+            (False, _) | (Unknown, True) => Some(Ordering::Greater),
+            (Unknown, False) | (True, _) => Some(Ordering::Less),
+        }
+    }
+}
+
+impl<C: ConditionType<N>, const N: usize> Condition<C, N> {
+    fn new(type_: C) -> Self {
+        Condition {
+            type_,
+            ..Default::default()
+        }
+    }
+
+    fn with_status(type_: C, status: ConditionStatus) -> Condition<C, N> {
+        Condition {
+            status,
+            ..Condition::new(type_)
+        }
+    }
+
+    fn is_true(&self) -> bool {
+        self.status == ConditionStatus::True
+    }
+
+    fn is_false(&self) -> bool {
+        self.status == ConditionStatus::False
+    }
+
+    #[allow(dead_code)]
+    fn is_unknown(&self) -> bool {
+        self.status == ConditionStatus::Unknown
     }
 }
 
@@ -161,145 +298,8 @@ impl<C: ConditionType<N>, const N: usize> Conditions<C, N> {
     }
 }
 
-/// A custom resource status condition.
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, PartialEq)]
-pub struct Condition<C: ConditionType<N>, const N: usize> {
-    #[serde(rename = "type")]
-    pub type_: C,
-    pub status: ConditionStatus,
-    /// ConditionSeverityError specifies that a failure of a condition type
-    /// should be viewed as an error.  As "Error" is the default for conditions
-    /// we use the empty string (coupled with omitempty) to avoid confusion in
-    /// the case where the condition is in state "True" (aka nothing is wrong).
-    // In rust lang we accomplish this with Error as a Default variant
-    #[serde(default)]
-    #[serde(skip_serializing_if = "ConditionSeverity::is_err")]
-    pub severity: ConditionSeverity,
-    // TODO: make this a "VolatileTime"
-    //#[serde(deserialize_with = "from_ts")]
-    pub last_transition_time: Option<chrono::DateTime<chrono::Utc>>,
-    pub reason: Option<String>,
-    pub message: Option<String>,
-}
-
-impl<C: ConditionType<N>, const N: usize> Default for Condition<C, N> {
-    fn default() -> Condition<C, N> {
-        Condition {
-            type_: C::default(),
-            status: ConditionStatus::default(),
-            severity: ConditionSeverity::default(),
-            last_transition_time: Some(chrono::Utc::now()),
-            reason: None,
-            message: None
-        }
-    }
-}
-
-impl<C: ConditionType<N>, const N: usize> PartialOrd for Condition<C, N> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        use ConditionStatus::*;
-        use std::cmp::Ordering;
-
-        let time_ord = match (self.last_transition_time, other.last_transition_time) {
-            (Some(left), Some(right)) => left.partial_cmp(&right),
-            _ => None
-        };
-
-        match (self.status, other.status) {
-            (False, False) | (Unknown, Unknown) | (True, True) => match time_ord {
-                Some(ord) => Some(ord),
-                None => Some(Ordering::Equal)
-            },
-            (False, _) | (Unknown, True) => Some(Ordering::Greater),
-            (Unknown, False) | (True, _) => Some(Ordering::Less),
-        }
-    }
-}
-
-/// The state of a [`Condition`].
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, JsonSchema, PartialEq)]
-pub enum ConditionStatus {
-    True,
-    False,
-    Unknown,
-}
-
-impl Default for ConditionStatus {
-    fn default() -> Self {
-        ConditionStatus::Unknown
-    }
-}
-
-impl<C: ConditionType<N>, const N: usize> Condition<C, N> {
-    fn new(type_: C) -> Self {
-        Condition {
-            type_,
-            ..Default::default()
-        }
-    }
-
-    fn with_status(type_: C, status: ConditionStatus) -> Condition<C, N> {
-        Condition {
-            status,
-            ..Condition::new(type_)
-        }
-    }
-
-    fn is_true(&self) -> bool {
-        self.status == ConditionStatus::True
-    }
-
-    fn is_false(&self) -> bool {
-        self.status == ConditionStatus::False
-    }
-
-    #[allow(dead_code)]
-    fn is_unknown(&self) -> bool {
-        self.status == ConditionStatus::Unknown
-    }
-}
-
-/// Provides [`ConditionManager`] access to the [`Conditions`],
-/// and exposes control of the top-level [`Condition`].
-pub trait ConditionAccessor<C: ConditionType<N>, const N: usize> {
-    /// Return the conditions of your CR status type.
-    fn conditions(&mut self) -> &mut Conditions<C, N>;
-
-    /// Returns a [`ConditionManager`] for more fine-grained control of [`Conditions`].
-    fn manager(&mut self) -> ConditionManager<C, N> {
-        ConditionManager::new(self.conditions())
-    }
-
-    /// Returns true if the resource is ready overall.
-    fn is_ready(&mut self) -> bool {
-        self.manager().is_happy()
-    }
-
-    /// Set the status of the top level condition type to false
-    fn mark_false(&mut self, reason: &str, message: Option<String>) {
-        let t = self.manager().get_top_level_condition().type_;
-        self.manager().mark_false(t, reason, message);
-    }
-
-    /// Set the status of the top level condition to unknown. Typically used when beginning the
-    /// reconciliation of a new generation.
-    fn mark_unknown(&mut self) {
-        let t = self.manager().get_top_level_condition().type_;
-        self.manager().mark_unknown(
-            t,
-            "NewObservedGenFailure",
-            Some("unsuccessfully observed a new generation".into())
-        );
-    }
-
-    fn mark_unknown_with_message(&mut self, reason: &str, message: Option<String>) {
-        let t = self.manager().get_top_level_condition().type_;
-        self.manager().mark_unknown(t, reason, message);
-    }
-}
-
 /// Mutates [`Conditions`] in accordance with the condition dependency chain defined by a
-/// [`ConditionType`]
+/// [`ConditionType`].
 pub struct ConditionManager<'a, C, const N: usize>
 where C: ConditionType<N> {
     set: ConditionSet<C, N>,
