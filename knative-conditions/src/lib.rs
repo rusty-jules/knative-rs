@@ -23,6 +23,7 @@ where C: ConditionType<N> {
         }
     }
 
+    /// Whether the [`ConditionType`] determines happiness.
     pub fn is_terminal(&self, condition_type: &C) -> bool {
         self.dependents.contains(&condition_type) || self.happy == *condition_type
     }
@@ -36,14 +37,18 @@ where C: ConditionType<N> {
     }
 }
 
+/// Enums that implement [`ConditionType`] can be used to differentiate [`Condition`]
+/// and describe the state of the resource.
 pub trait ConditionType<const N: usize>: Clone + Copy + Default + Debug +  PartialEq {
+    /// The top-level variant that determines overall readiness of the resource.
     fn happy() -> Self;
-
+    /// Variants that must be true to consider the happy condition true.
     fn dependents() -> [Self; N];
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug, JsonSchema, PartialEq)]
 #[non_exhaustive]
+/// The importance of a conditions status.
 pub enum ConditionSeverity {
     Error,
     Warning,
@@ -62,6 +67,7 @@ impl Default for ConditionSeverity {
     }
 }
 
+/// A [`Vec`] of [`Condition`] that maintains transition times.
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
 pub struct Conditions<C, const N: usize>(Vec<Condition<C, N>>)
     where C: ConditionType<N>;
@@ -164,6 +170,7 @@ impl<C: ConditionType<N>, const N: usize> Conditions<C, N> {
     }
 }
 
+/// A custom resource status condition.
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema, PartialEq)]
 pub struct Condition<C: ConditionType<N>, const N: usize> {
     #[serde(rename = "type")]
@@ -218,6 +225,7 @@ impl<C: ConditionType<N>, const N: usize> PartialOrd for Condition<C, N> {
     }
 }
 
+/// The state of a [`Condition`].
 #[derive(Deserialize, Serialize, Clone, Copy, Debug, JsonSchema, PartialEq)]
 pub enum ConditionStatus {
     True,
@@ -269,12 +277,13 @@ pub trait ConditionAccessor<C: ConditionType<N>, const N: usize> {
         self.manager().is_happy()
     }
 
+    /// Set the status of the top level condition type to false
     fn mark_false(&mut self, reason: &str, message: Option<String>) {
         let t = self.manager().get_top_level_condition().type_;
         self.manager().mark_false(t, reason, message);
     }
 
-    /// Set the condition that the source status is unknown. Typically used when beginning the
+    /// Set the status of the top level condition to unknown. Typically used when beginning the
     /// reconciliation of a new generation.
     fn mark_unknown(&mut self) {
         let t = self.manager().get_top_level_condition().type_;
@@ -291,6 +300,8 @@ pub trait ConditionAccessor<C: ConditionType<N>, const N: usize> {
     }
 }
 
+/// Mutates [`Conditions`] in accordance with the condition dependency chain defined by a
+/// [`ConditionType`]
 pub struct ConditionManager<'a, C, const N: usize>
 where C: ConditionType<N> {
     set: ConditionSet<C, N>,

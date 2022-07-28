@@ -108,11 +108,15 @@ pub struct SourceStatus<S: SourceConditionType<N>, const N: usize> {
     pub cloud_event_attributes: Option<Vec<CloudEventAttributes>>,
 }
 
-/// A baseline ConditionType for SourceStatus.
-/// Custom conditions should implement [`SourceConditionType`].
+/// A baseline [`ConditionType`] for [`SourceStatus`].
+/// Custom conditions should implement [`SourceConditionType`] in order to be used by
+/// [`SourceStatus`].
 #[derive(crate::derive::ConditionType, Deserialize, Serialize, Copy, Clone, Debug, JsonSchema, PartialEq)]
 pub enum SourceCondition {
     Ready,
+    /// A [`sink_uri`] has been set on the resource.
+    ///
+    /// [`sink_uri`]:./struct.SourceStatus.html#structfield.sink_uri
     #[dependent]
     SinkProvided
 }
