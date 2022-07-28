@@ -121,16 +121,10 @@ pub enum SourceCondition {
     SinkProvided
 }
 
-impl<S> ConditionAccessor<S> for SourceStatus<S> 
+impl<S> ConditionAccessor<S> for SourceStatus<S>
 where S: SourceConditionType {
     fn conditions(&mut self) -> &mut Conditions<S> {
-        match self.status.conditions {
-            Some(ref mut conditions) => conditions,
-            None => {
-                self.status.conditions = Some(Conditions::default());
-                self.conditions()
-            }
-        }
+        self.status.conditions()
     }
 }
 
