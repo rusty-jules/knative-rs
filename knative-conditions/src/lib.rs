@@ -64,32 +64,22 @@ pub trait ConditionAccessor<C: ConditionType<N>, const N: usize> {
 }
 
 /// The state of a [`Condition`].
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, JsonSchema, PartialEq)]
+#[derive(Deserialize, Serialize, Clone, Copy, Default, Debug, JsonSchema, PartialEq)]
 pub enum ConditionStatus {
     True,
     False,
+    #[default]
     Unknown,
 }
 
-impl Default for ConditionStatus {
-    fn default() -> Self {
-        ConditionStatus::Unknown
-    }
-}
-
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, JsonSchema, PartialEq)]
+/// The importance of a [`Condition`].
+#[derive(Deserialize, Serialize, Clone, Copy, Default, Debug, JsonSchema, PartialEq)]
 #[non_exhaustive]
-/// The importance of a conditions status.
 pub enum ConditionSeverity {
+    #[default]
     Error,
     Warning,
     Info,
-}
-
-impl Default for ConditionSeverity {
-    fn default() -> Self {
-        ConditionSeverity::Error
-    }
 }
 
 impl ConditionSeverity {
