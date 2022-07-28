@@ -3,7 +3,7 @@ use super::{
     knative_reference::KReference,
     status_types::Status,
 };
-use knative_conditions::{ConditionAccessor, ConditionType, ConditionManager, Condition, Conditions};
+use knative_conditions::{ConditionAccessor, ConditionType, Conditions};
 use crate::error::{DiscoveryError, Error};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -117,30 +117,13 @@ pub enum SourceCondition {
     SinkProvided
 }
 
-pub trait SourceConditionType<const N:usize>: knative_conditions::ConditionType<N> {
-    fn sinkprovided() -> Self;
-}
-
-impl SourceConditionType<1> for SourceCondition {
-    fn sinkprovided() -> Self {
-        Self::SinkProvided
-    }
-}
-
 impl<S, const N: usize> ConditionAccessor<S, N> for SourceStatus<S, N> 
-where S: ConditionType<N> + SourceConditionType<N> {
+where S: SourceConditionType<N> {
     fn conditions(&mut self) -> &mut Conditions<S, N> {
         match self.status.conditions {
             Some(ref mut conditions) => conditions,
             None => {
-                self.status.conditions = Some(Conditions::with_conditions(
-                    vec![
-                        Condition::default(),
-                        Condition {
-                            type_: S::sinkprovided(),
-                            ..Default::default()
-                        },
-                    ]));
+                self.status.conditions = Some(Conditions::default());
                 self.conditions()
             }
         }
@@ -148,7 +131,7 @@ where S: ConditionType<N> + SourceConditionType<N> {
 }
 
 /// Allows a status to manage [`SourceStatus`].
-pub trait SinkManager<S, const N: usize>: ConditionAccessor<S, N>
+pub trait SinkManager<S, const N: usize>: ConditionAccessor<S, N> + SourceConditionManager<S, N>
 where S: ConditionType<N> + SourceConditionType<N> {
     /// Return the [`SourceStatus`] of your CRD Status type.
     fn source_status(&mut self) -> &mut SourceStatus<S, N>;
@@ -186,6 +169,7 @@ pub struct CloudEventAttributes {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::derive::ConditionType;
 
     struct MyStatus {
         source_status: SourceStatus<SourceCondition, 1>
@@ -202,7 +186,87 @@ mod test {
     #[test]
     fn can_update_sink() {
         let mut status = MyStatus::default();
-        status.source_status.mark_sinkprovided();
         status.source_status.mark_sink("http://url".parse().unwrap());
+    }
+
+    #[derive(ConditionType, Clone, Copy, Debug, PartialEq)]
+    enum MyCondition {
+        Ready,
+        #[dependent]
+        SinkProvided,
+        #[dependent]
+        Important,
+        Unimportant
+    }
+
+    impl SourceConditionType<2> for MyCondition {
+        fn sinkprovided() -> Self {
+            MyCondition::SinkProvided
+        }
+    }
+
+    struct MyCustomStatus {
+        source_status: SourceStatus<MyCondition, 2>
+    }
+
+    impl Default for MyCustomStatus {
+        fn default() -> MyCustomStatus {
+            MyCustomStatus {
+                source_status: SourceStatus::default()
+            }
+        }
+    }
+
+    #[test]
+    fn can_update_custom_sink() {
+        let mut status = MyCustomStatus::default();
+        status.source_status.mark_sink("http://url".parse().unwrap());
+    }
+
+    #[test]
+    fn all_conditions_determine_ready() {
+        let mut status = MyCustomStatus::default();
+        let s = &mut status.source_status;
+
+        assert_eq!(s.is_ready(), false);
+
+        s.mark_unimportant();
+        assert_eq!(s.is_ready(), false);
+
+        s.mark_sink("http://url".parse().unwrap());
+        assert_eq!(s.is_ready(), false);
+
+        s.mark_important();
+        assert_eq!(s.is_ready(), true);
+
+        s.mark_not_important("ImportantReason", None);
+        assert_eq!(s.is_ready(), false);
+
+        s.mark_important();
+        assert_eq!(s.is_ready(), true);
+
+        s.mark_no_sink("NotSink", None);
+        assert_eq!(s.is_ready(), false);
+
+        s.mark_sink("http://url".parse().unwrap());
+        s.mark_important();
+        s.mark_not_unimportant("NotImportant", None);
+        assert_eq!(s.is_ready(), true);
+
+        s.mark_unknown();
+        assert_eq!(s.is_ready(), false);
+    }
+
+    #[test]
+    fn can_update_custom_conditions() {
+        let mut status = MyCustomStatus::default();
+        let s = &mut status.source_status;
+        s.manager()
+            .mark_true_with_reason(
+                MyCondition::Unimportant,
+                "NotImportant",
+                Some("More information on Unimportant".into())
+        );
+        assert_eq!(s.is_ready(), false);
     }
 }
