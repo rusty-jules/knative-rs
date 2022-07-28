@@ -9,6 +9,19 @@ pub trait ConditionType<const N: usize>: Clone + Copy + Default + Debug +  Parti
     fn happy() -> Self;
     /// Variants that must be true to consider the happy condition true.
     fn dependents() -> [Self; N];
+
+    /// Whether the [`ConditionType`] determines happiness.
+    fn is_terminal(&self) -> bool {
+        Self::dependents().contains(self) || *self == Self::happy()
+    }
+
+    fn severity(&self) -> ConditionSeverity {
+        if self.is_terminal() {
+            ConditionSeverity::Error
+        } else {
+            ConditionSeverity::Info
+        }
+    }
 }
 
 /// Provides [`ConditionManager`] access to the [`Conditions`],
@@ -85,11 +98,9 @@ impl ConditionSeverity {
     }
 }
 
-/// Defines how the variants of a [`ConditionType`]
-/// depend on one another.
+/// Ensure that a [`ConditionType`] dependency chain is DAG
 struct ConditionSet<C: ConditionType<N>, const N: usize> {
-    happy: C,
-    dependents: [C; N],
+    _marker: std::marker::PhantomData::<C>
 }
 
 impl<C, const N: usize> ConditionSet<C, N>
@@ -99,24 +110,7 @@ where C: ConditionType<N> {
             !C::dependents().contains(&C::happy()),
             "dependents may not contain happy condition"
         );
-
-        ConditionSet {
-            happy: C::happy(),
-            dependents: C::dependents()
-        }
-    }
-
-    /// Whether the [`ConditionType`] determines happiness.
-    pub fn is_terminal(&self, condition_type: &C) -> bool {
-        self.dependents.contains(&condition_type) || self.happy == *condition_type
-    }
-
-    pub fn severity(&self, condition_type: &C) -> ConditionSeverity {
-        if self.is_terminal(condition_type) {
-            ConditionSeverity::Error
-        } else {
-            ConditionSeverity::Info
-        }
+        ConditionSet { _marker: std::marker::PhantomData }
     }
 }
 
@@ -302,17 +296,15 @@ impl<C: ConditionType<N>, const N: usize> Conditions<C, N> {
 /// [`ConditionType`].
 pub struct ConditionManager<'a, C, const N: usize>
 where C: ConditionType<N> {
-    set: ConditionSet<C, N>,
     conditions: &'a mut Conditions<C, N>,
 }
 
 impl<'a, C, const N: usize> ConditionManager<'a, C, N>
 where C: ConditionType<N> {
     pub fn new(conditions: &'a mut Conditions<C, N>) -> Self {
-        ConditionManager {
-            set: ConditionSet::new(),
-            conditions
-        }
+        // ConditionSet is only being used to assert that the condition dependency chain is a DAG
+        ConditionSet::<C, N>::new();
+        ConditionManager { conditions }
     }
 
     pub fn get_condition(&self, condition_type: C) -> Option<&Condition<C, N>> {
@@ -325,7 +317,7 @@ where C: ConditionType<N> {
     /// *Panics* if the [`Conditions`] have not been properly initialized.
     /// See [`Conditions::default()`].
     pub fn get_top_level_condition(&self) -> &Condition<C, N> {
-        self.get_condition(self.set.happy)
+        self.get_condition(C::happy())
             .as_ref()
             .expect("top level condition is initialized")
     }
@@ -334,44 +326,38 @@ where C: ConditionType<N> {
         self.get_top_level_condition().is_true()
     }
 
-    fn find_unhappy_dependent(&mut self) -> Option<&mut Condition<C, N>> {
+    fn find_unhappy_dependent(&self) -> Option<&Condition<C, N>> {
         self.conditions.0
-            .iter_mut()
+            .iter()
             // Filter to non-true, terminal dependents
-            .filter(|cond| cond.type_ != self.set.happy && self.set.is_terminal(&cond.type_) && !cond.is_true())
+            .filter(|cond| cond.type_ != C::happy() && cond.type_.is_terminal() && !cond.is_true())
             // Return a condition, prioritizing most recent False over most recent Unknown
             .reduce(|unhappy, cond| if cond > unhappy { cond } else { unhappy })
     }
 
     /// Mark the happy condition to true if all other dependents are also true.
     fn recompute_happiness(&mut self, condition_type: &C) {
-        let type_ = self.set.happy;
-        let severity = self.set.severity(&self.set.happy);
-
-        let cond = if let Some(dependent) = self.find_unhappy_dependent() {
-            // make unhappy dependent reflect in happy condition
-            Some(Condition {
-                type_,
-                status: dependent.status,
-                reason: dependent.reason.clone(),
-                message: dependent.message.clone(),
-                severity,
-                ..Default::default()
-            })
-        } else if *condition_type != self.set.happy {
-            // set happy to true
-            Some(Condition {
-                type_,
-                status: ConditionStatus::True,
-                severity,
-                ..Default::default()
-            })
-        } else {
-            None
-        };
-
-        if let Some(cond) = cond {
-            self.conditions.set_cond(cond);
+        match self.find_unhappy_dependent() {
+            Some(dependent) => {
+                let cond = Condition {
+                    type_: C::happy(),
+                    status: dependent.status,
+                    reason: dependent.reason.clone(),
+                    message: dependent.message.clone(),
+                    severity: C::happy().severity(),
+                    ..Default::default()
+                };
+                self.conditions.set_cond(cond);
+            },
+            None => if *condition_type != C::happy() {
+                // set happy to true
+                self.conditions.set_cond(Condition {
+                    type_: C::happy(),
+                    status: ConditionStatus::True,
+                    severity: C::happy().severity(),
+                    ..Default::default()
+                })
+            }
         }
     }
 
@@ -390,8 +376,8 @@ where C: ConditionType<N> {
     pub fn mark_false(&mut self, condition_type: C, reason: &str, message: Option<String>) {
         self.conditions.mark_false(condition_type, reason.to_string(), message.clone());
 
-        if self.set.dependents.contains(&condition_type) {
-            self.conditions.mark_false(self.set.happy, reason.to_string(), message)
+        if C::dependents().contains(&condition_type) {
+            self.conditions.mark_false(C::happy(), reason.to_string(), message)
         }
     }
 
@@ -405,11 +391,11 @@ where C: ConditionType<N> {
         if let Some(dependent) = self.find_unhappy_dependent() {
             if dependent.is_false() {
                 if !self.get_top_level_condition().is_false() {
-                    self.mark_false(self.set.happy, reason, message);
+                    self.mark_false(C::happy(), reason, message);
                }
             }
-        } else if self.set.is_terminal(&condition_type) {
-           self.conditions.mark_unknown(self.set.happy, reason.to_string(), message);
+        } else if condition_type.is_terminal() {
+           self.conditions.mark_unknown(C::happy(), reason.to_string(), message);
         }
     }
 }
@@ -477,7 +463,7 @@ mod test {
             }
         ]);
 
-        let mut manager = ConditionManager::new(&mut conditions);
+        let manager = ConditionManager::new(&mut conditions);
         let unhappy = manager.find_unhappy_dependent().unwrap();
         // Returns most recent False dependent
         assert_eq!(unhappy.type_, TestCondition::SinkProvided);
