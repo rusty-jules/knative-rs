@@ -8,3 +8,7 @@ pub mod conditions {
 pub mod derive {
     pub use knative_derive::ConditionType;
 }
+
+#[doc = include_str!("../../README.md")]
+#[cfg(doctest)]
+pub struct ReadmeDoctests;
