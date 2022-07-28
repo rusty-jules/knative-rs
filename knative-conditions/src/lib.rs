@@ -1,6 +1,5 @@
 use serde::{Serialize, Deserialize};
 use schemars::JsonSchema;
-use std::ops::{Deref, DerefMut};
 use std::fmt::Debug;
 
 /// Defines how the variants of a [`ConditionType`]
@@ -77,40 +76,31 @@ where C: ConditionType<N> {
     }
 }
 
-impl<C: ConditionType<N>, const N: usize> Deref for Conditions<C, N> {
-    type Target = Vec<Condition<C, N>>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<C: ConditionType<N>, const N: usize> DerefMut for Conditions<C, N> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 impl<C: ConditionType<N>, const N: usize> Conditions<C, N> {
-    pub fn new() -> Conditions<C, N> {
-        Conditions(vec![])
-    }
-
     pub fn with_conditions(conditions: Vec<Condition<C, N>>) -> Conditions<C, N> {
+        assert!(
+            conditions.iter().any(|c| c.type_ == C::happy()),
+            "Conditions must be initialized with the happy ConditionType"
+        );
         Conditions(conditions)
     }
 
-    pub fn get_cond(&mut self, type_: &C) -> Option<&mut Condition<C, N>> {
-        self.iter_mut().find(|c| c.type_ == *type_)
+    fn get_cond(&self, type_: &C) -> Option<&Condition<C, N>> {
+        self.0.iter().find(|c| c.type_ == *type_)
     }
 
-    pub fn set_cond(&mut self, mut condition: Condition<C, N>) {
+    fn get_cond_mut(&mut self, type_: &C) -> Option<&mut Condition<C, N>> {
+        self.0.iter_mut().find(|c| c.type_ == *type_)
+    }
+
+    fn set_cond(&mut self, mut condition: Condition<C, N>) {
         // The go version collects all the conditions of different type != arg
         // into a new array, then checks if only the time has changed
         // on the condition to set. If so it returns, otherwise
         // it updates that single condition, re-sorts the array of conditions
         // by Type (alphabetically?) and sets the new array as the conditions.
         // This may be due to the "accessor" interface that we have skipped here.
-        match self.get_cond(&condition.type_) {
+        match self.get_cond_mut(&condition.type_) {
             Some(cond) => {
                 // Check if only the time has changed
                 let test_cond = Condition {
@@ -129,13 +119,13 @@ impl<C: ConditionType<N>, const N: usize> Conditions<C, N> {
             }
             None => {
                 condition.last_transition_time = Some(chrono::Utc::now());
-                self.push(condition);
+                self.0.push(condition);
                 // TODO: sort the output...alphabetically by type name?
             }
         }
     }
 
-    pub fn mark_true(&mut self, condition_type: C) {
+    fn mark_true(&mut self, condition_type: C) {
         self.set_cond(Condition {
             type_: condition_type,
             status: ConditionStatus::True,
@@ -143,7 +133,7 @@ impl<C: ConditionType<N>, const N: usize> Conditions<C, N> {
         })
     }
 
-    pub fn mark_true_with_reason(&mut self, condition_type: C, reason: String, message: Option<String>) {
+    fn mark_true_with_reason(&mut self, condition_type: C, reason: String, message: Option<String>) {
         self.set_cond(Condition {
             type_: condition_type,
             status: ConditionStatus::True,
@@ -153,7 +143,7 @@ impl<C: ConditionType<N>, const N: usize> Conditions<C, N> {
         })
     }
 
-    pub fn mark_false(&mut self, condition_type: C, reason: String, message: Option<String>) {
+    fn mark_false(&mut self, condition_type: C, reason: String, message: Option<String>) {
         self.set_cond(Condition {
             type_: condition_type,
             status: ConditionStatus::False,
@@ -163,15 +153,7 @@ impl<C: ConditionType<N>, const N: usize> Conditions<C, N> {
         });
     }
 
-    pub fn mark_unknown(&mut self, condition_type: C) {
-        self.set_cond(Condition {
-            type_: condition_type,
-            status: ConditionStatus::Unknown,
-            ..Default::default()
-        })
-    }
-
-    pub fn mark_unknown_with_reason(&mut self, condition_type: C, reason: String, message: Option<String>) {
+    fn mark_unknown(&mut self, condition_type: C, reason: String, message: Option<String>) {
         self.set_cond(Condition {
             type_: condition_type,
             status: ConditionStatus::Unknown,
@@ -265,15 +247,19 @@ impl<C: ConditionType<N>, const N: usize> Condition<C, N> {
         self.status == ConditionStatus::False
     }
 
+    #[allow(dead_code)]
     fn is_unknown(&self) -> bool {
         self.status == ConditionStatus::Unknown
     }
 }
 
+/// Provides [`ConditionManager`] access to the [`Conditions`],
+/// and exposes control of the top-level [`Condition`].
 pub trait ConditionAccessor<C: ConditionType<N>, const N: usize> {
     /// Return the conditions of your CR status type.
     fn conditions(&mut self) -> &mut Conditions<C, N>;
 
+    /// Returns a [`ConditionManager`] for more fine-grained control of [`Conditions`].
     fn manager(&mut self) -> ConditionManager<C, N> {
         ConditionManager::new(self.conditions())
     }
@@ -321,31 +307,26 @@ where C: ConditionType<N> {
     }
 
     pub fn get_condition(&self, condition_type: C) -> Option<&Condition<C, N>> {
-        self.conditions.iter().find(|cond| cond.type_ == condition_type)
+        self.conditions.get_cond(&condition_type)
     }
 
     /// Returns the happy [`Condition`].
+    ///
+    /// ### Panic
+    /// *Panics* if the [`Conditions`] have not been properly initialized.
+    /// See [`Conditions::default()`].
     pub fn get_top_level_condition(&self) -> &Condition<C, N> {
         self.get_condition(self.set.happy)
             .as_ref()
             .expect("top level condition is initialized")
     }
 
-    fn set_condition(&mut self, condition: Condition<C, N>) {
-        self.conditions.set_cond(condition)
-    }
-
     pub fn is_happy(&self) -> bool {
         self.get_top_level_condition().is_true()
     }
 
-    /// Whether the [`ConditionType`] determines happiness.
-    fn is_terminal(&self, condition_type: &C) -> bool {
-        self.set.is_terminal(&condition_type)
-    }
-
     fn find_unhappy_dependent(&mut self) -> Option<&mut Condition<C, N>> {
-        self.conditions
+        self.conditions.0
             .iter_mut()
             // Filter to non-true, terminal dependents
             .filter(|cond| cond.type_ != self.set.happy && self.set.is_terminal(&cond.type_) && !cond.is_true())
@@ -408,7 +389,7 @@ where C: ConditionType<N> {
     /// Set the status to unknown and also set the happy condition to unknown if no other dependent
     /// condition is in an error state.
     pub fn mark_unknown(&mut self, condition_type: C, reason: &str, message: Option<String>) {
-        self.conditions.mark_unknown_with_reason(condition_type, reason.to_string(), message.clone());
+        self.conditions.mark_unknown(condition_type, reason.to_string(), message.clone());
 
         // set happy condition to false if another dependent is false, otherwise set happy
         // condition to unknown if this condition is a dependent
@@ -419,7 +400,7 @@ where C: ConditionType<N> {
                }
             }
         } else if self.set.is_terminal(&condition_type) {
-           self.conditions.mark_unknown_with_reason(self.set.happy, reason.to_string(), message);
+           self.conditions.mark_unknown(self.set.happy, reason.to_string(), message);
         }
     }
 
@@ -495,7 +476,7 @@ mod test {
         assert_eq!(unhappy.status, ConditionStatus::False);
         assert_eq!(unhappy.last_transition_time.unwrap(), dt.and_hms(3, 0, 0));
         // Maintains order
-        let mut iter = conditions.iter();
+        let mut iter = conditions.0.iter();
         assert_eq!(iter.next().unwrap().type_, TestCondition::Ready);
         assert_eq!(iter.next().unwrap().type_, TestCondition::SinkProvided);
         assert_eq!(iter.next().unwrap().type_, TestCondition::SinkProvided);
