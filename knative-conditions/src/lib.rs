@@ -5,8 +5,7 @@ use std::fmt::Debug;
 
 /// Enums that implement [`ConditionType`] can be used to differentiate [`Condition`]
 /// and describe the state of the resource.
-pub trait ConditionType: Default + Debug + EnumSetType
-where Self: 'static {
+pub trait ConditionType: Default + Debug + EnumSetType {
     /// The top-level variant that determines overall readiness of the resource.
     fn happy() -> Self;
 
