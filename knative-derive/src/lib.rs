@@ -1,3 +1,4 @@
+mod error;
 mod inner;
 
 use proc_macro::TokenStream;
@@ -5,6 +6,8 @@ use syn::{
     parse_macro_input,
     DeriveInput,
 };
+
+const REQUIRED_VARIANTS: [&str; 2] = ["Ready", "Succeeded"];
 
 /// Derive [`knative_conditions::ConditionType`] on your own `enum` to adhere to the Knative Source schema and condition
 /// management.
