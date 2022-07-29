@@ -80,4 +80,41 @@ mod test {
         status.mark_unknown();
         assert_eq!(status.is_ready(), false);
     }
+
+    #[test]
+    fn can_init_with_custom_condition_state() {
+        use knative_conditions::{Condition, ConditionStatus};
+
+        let _status = CustomStatus {
+            status: Status {
+                conditions: Some(Conditions::with_conditions(vec![
+                    Condition {
+                        type_: CustomCondition::Succeeded,
+                        status: ConditionStatus::True,
+                        ..Default::default()
+                    }
+                ])),
+                ..Default::default()
+            }
+        };
+    }
+
+    #[test]
+    #[should_panic]
+    fn fails_to_init_with_improper_custom_condition_state() {
+        use knative_conditions::{Condition, ConditionStatus};
+
+        let _status = CustomStatus {
+            status: Status {
+                conditions: Some(Conditions::with_conditions(vec![
+                    Condition {
+                        type_: CustomCondition::SomethingElse,
+                        status: ConditionStatus::True,
+                        ..Default::default()
+                    }
+                ])),
+                ..Default::default()
+            }
+        };
+    }
 }

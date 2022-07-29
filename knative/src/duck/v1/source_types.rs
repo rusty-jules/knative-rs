@@ -298,49 +298,4 @@ mod test {
         };
         status.mark_sink("http://url".parse().unwrap());
     }
-
-    #[test]
-    fn can_init_with_custom_condition_state() {
-        use knative_conditions::{Condition, ConditionStatus};
-
-        let mut status = MyCustomStatus {
-            source_status: SourceStatus {
-                status: Status {
-                    conditions: Some(Conditions::with_conditions(vec![
-                        Condition {
-                            type_: MyCondition::Ready,
-                            status: ConditionStatus::True,
-                            ..Default::default()
-                        }
-                    ])),
-                    ..Default::default()
-                },
-                ..Default::default()
-            }
-        };
-
-        status.mark_sink("http://url".parse().unwrap());
-    }
-
-    #[test]
-    #[should_panic]
-    fn fails_to_init_with_improper_custom_condition_state() {
-        use knative_conditions::{Condition, ConditionStatus};
-
-        let _status = MyCustomStatus {
-            source_status: SourceStatus {
-                status: Status {
-                    conditions: Some(Conditions::with_conditions(vec![
-                        Condition {
-                            type_: MyCondition::Unimportant,
-                            status: ConditionStatus::True,
-                            ..Default::default()
-                        }
-                    ])),
-                    ..Default::default()
-                },
-                ..Default::default()
-            }
-        };
-    }
 }
