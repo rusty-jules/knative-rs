@@ -177,7 +177,7 @@ mod test {
     }
 
     #[test]
-    fn can_update_sink() {
+    fn can_manage_sink() {
         let mut status = MyStatus {
             source_status: SourceStatus::default()
         };
@@ -205,7 +205,7 @@ mod test {
     }
 
     #[test]
-    fn can_update_custom_sink() {
+    fn can_manage_sink_on_source_status() {
         let mut status = MyCustomStatus {
             source_status: SourceStatus::default()
         };
@@ -249,17 +249,98 @@ mod test {
     }
 
     #[test]
-    fn can_update_custom_conditions() {
+    fn can_manage_custom_conditions() {
         let mut status = MyCustomStatus {
             source_status: SourceStatus::default()
         };
         let s = &mut status.source_status;
+
+        // Using MyConditionManager methods yields the same result as ConditionManager methods
+        s.mark_important();
+        s.mark_unimportant_with_reason(
+            "NotImportant",
+            Some("More information on Unimportant".into())
+        );
+        let old_conditions = s.conditions().clone();
+
+        s.manager().mark_true(MyCondition::Important);
         s.manager()
             .mark_true_with_reason(
                 MyCondition::Unimportant,
                 "NotImportant",
                 Some("More information on Unimportant".into())
         );
+        assert_eq!(old_conditions, *s.conditions());
         assert_eq!(s.is_ready(), false);
+
+        // Use of this function is discouraged because it does not guarantee that the sink has been
+        // set on SourceStatus, but you may choose to handle sink_uri yourself.
+        MyConditionManager::mark_sinkprovided(s);
+        assert_eq!(s.is_ready(), true);
+    }
+
+    impl ConditionAccessor<MyCondition> for MyCustomStatus {
+        fn conditions(&mut self) -> &mut Conditions<MyCondition> {
+            self.source_status.conditions()
+        }
+    }
+
+    impl SinkManager<MyCondition> for MyCustomStatus {
+        fn source_status(&mut self) -> &mut SourceStatus<MyCondition> {
+            &mut self.source_status
+        }
+    }
+
+    #[test]
+    fn can_manage_sink_on_custom_status() {
+        let mut status = MyCustomStatus {
+            source_status: SourceStatus::default()
+        };
+        status.mark_sink("http://url".parse().unwrap());
+    }
+
+    #[test]
+    fn can_init_with_custom_condition_state() {
+        use knative_conditions::{Condition, ConditionStatus};
+
+        let mut status = MyCustomStatus {
+            source_status: SourceStatus {
+                status: Status {
+                    conditions: Some(Conditions::with_conditions(vec![
+                        Condition {
+                            type_: MyCondition::Ready,
+                            status: ConditionStatus::True,
+                            ..Default::default()
+                        }
+                    ])),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }
+        };
+
+        status.mark_sink("http://url".parse().unwrap());
+    }
+
+    #[test]
+    #[should_panic]
+    fn fails_to_init_with_improper_custom_condition_state() {
+        use knative_conditions::{Condition, ConditionStatus};
+
+        let _status = MyCustomStatus {
+            source_status: SourceStatus {
+                status: Status {
+                    conditions: Some(Conditions::with_conditions(vec![
+                        Condition {
+                            type_: MyCondition::Unimportant,
+                            status: ConditionStatus::True,
+                            ..Default::default()
+                        }
+                    ])),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }
+        };
     }
 }
