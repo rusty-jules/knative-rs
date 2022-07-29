@@ -187,7 +187,7 @@ impl<C: ConditionType> Condition<C> {
 }
 
 /// A `Vec<Condition>` that maintains transition times.
-#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, PartialEq)]
 pub struct Conditions<C: ConditionType>(Vec<Condition<C>>);
 
 impl<C: ConditionType> Default for Conditions<C> {
