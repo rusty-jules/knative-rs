@@ -1,21 +1,22 @@
+use enumset::{EnumSet, EnumSetType};
 use schemars::JsonSchema;
 use serde::{Serialize, Deserialize};
 use std::fmt::Debug;
 
 /// Enums that implement [`ConditionType`] can be used to differentiate [`Condition`]
 /// and describe the state of the resource.
-pub trait ConditionType: Clone + Copy + Default + Debug + PartialEq
+pub trait ConditionType: Default + Debug + EnumSetType
 where Self: 'static {
     /// The top-level variant that determines overall readiness of the resource.
     fn happy() -> Self;
 
     /// Variants that must be true to consider the happy condition true.
-    fn dependents() -> &'static [Self];
+    fn dependents() -> EnumSet<Self>;
 
     /// Whether the [`ConditionType`] determines happiness.
     #[inline]
     fn is_terminal(&self) -> bool {
-        Self::dependents().contains(self) || *self == Self::happy()
+        Self::dependents().contains(*self) || *self == Self::happy()
     }
 
     /// A [`Condition`] severity defaults to whether it determines overall resource readiness or
@@ -195,7 +196,7 @@ impl<C: ConditionType> Default for Conditions<C> {
     fn default() -> Self {
         let iter = [C::happy()]
             .into_iter()
-            .chain(C::dependents().iter().cloned())
+            .chain(C::dependents())
             .map(Condition::new);
         Conditions(Vec::from_iter(iter))
     }
@@ -207,14 +208,15 @@ impl<C: ConditionType> Conditions<C> {
             conditions.iter().any(|c| c.type_ == C::happy()),
             "Conditions must be initialized with the happy ConditionType"
         );
-        assert!(
-            conditions.iter().fold(std::collections::HashSet::new(), |mut acc, c| {
-                // insert the ConditionType as a string to avoid C: Hashable bound
-                acc.insert(format!("{:?}", c.type_));
+        conditions.iter()
+            .fold(EnumSet::new(), |mut acc, c| {
+                assert!(
+                    !acc.contains(c.type_),
+                    "ConditionType must be unique to each Condition"
+                );
+                acc.insert(c.type_);
                 acc
-            }).len() == conditions.len(),
-            "ConditionType must be unique to each Condition"
-        );
+            });
         Conditions(conditions)
     }
 
@@ -296,7 +298,7 @@ pub struct ConditionManager<'a, C: ConditionType> {
 impl<'a, C: ConditionType> ConditionManager<'a, C> {
     pub fn new(conditions: &'a mut Conditions<C>) -> Self {
         assert!(
-            !C::dependents().contains(&C::happy()),
+            !C::dependents().contains(C::happy()),
             "dependents may not contain happy condition"
         );
         ConditionManager { conditions }
@@ -371,7 +373,7 @@ impl<'a, C: ConditionType> ConditionManager<'a, C> {
     pub fn mark_false(&mut self, condition_type: C, reason: &str, message: Option<String>) {
         self.conditions.mark_false(condition_type, reason.to_string(), message.clone());
 
-        if C::dependents().contains(&condition_type) {
+        if C::dependents().contains(condition_type) {
             self.conditions.mark_false(C::happy(), reason.to_string(), message)
         }
     }
@@ -400,7 +402,7 @@ mod test {
     use super::*;
     use chrono::TimeZone;
 
-    #[derive(Deserialize, Copy, Clone, Debug, PartialEq)]
+    #[derive(Deserialize, EnumSetType, Debug)]
     enum TestCondition {
         Ready,
         SinkProvided,
@@ -413,8 +415,8 @@ mod test {
             TestCondition::Ready
         }
 
-        fn dependents() -> &'static [Self] {
-            &[TestCondition::SinkProvided, TestCondition::OtherCondition]
+        fn dependents() -> EnumSet<Self> {
+            TestCondition::SinkProvided | TestCondition::OtherCondition
         }
     }
 
@@ -466,6 +468,15 @@ mod test {
         assert_eq!(iter.next().unwrap().type_, TestCondition::SinkProvided);
         assert_eq!(iter.next().unwrap().type_, TestCondition::OtherCondition);
         assert_eq!(iter.next().unwrap().type_, TestCondition::Unimportant);
+    }
+
+    #[test]
+    #[should_panic]
+    fn duplicate_condition_types_panics() {
+        Conditions::with_conditions(vec![
+            Condition::new(TestCondition::Ready),
+            Condition::new(TestCondition::Ready),
+        ]);
     }
 
     #[test]

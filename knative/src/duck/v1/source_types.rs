@@ -3,9 +3,10 @@ use super::{
     knative_reference::KReference,
     status_types::Status,
 };
-use knative_conditions::{ConditionAccessor, Conditions};
 use crate::derive::ConditionType;
 use crate::error::{DiscoveryError, Error};
+use knative_conditions::{ConditionAccessor, Conditions};
+use enumset::EnumSetType;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -104,7 +105,7 @@ pub struct CloudEventAttributes {
 ///
 /// Custom conditions should implement [`SourceConditionType`] in order to be used by
 /// [`SourceStatus`].
-#[derive(ConditionType, Deserialize, Serialize, Copy, Clone, Debug, JsonSchema, PartialEq)]
+#[derive(ConditionType, EnumSetType, Deserialize, Serialize, Debug, JsonSchema)]
 pub enum SourceCondition {
     Ready,
     /// A [`sink_uri`] has been set on the resource.
@@ -185,7 +186,7 @@ mod test {
         status.source_status.mark_sink("http://url".parse().unwrap());
     }
 
-    #[derive(ConditionType, Clone, Copy, Debug, PartialEq)]
+    #[derive(ConditionType, EnumSetType, Debug)]
     enum MyCondition {
         Ready,
         #[dependent]

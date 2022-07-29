@@ -116,8 +116,8 @@ pub fn inner_derive(ast: DeriveInput) -> Result<TokenStream> {
             }
 
             #[inline]
-            fn dependents() -> &'static [Self] {
-                &[#(#name::#dependents),*]
+            fn dependents() -> ::enumset::EnumSet<Self> {
+                ::enumset::enum_set!(#(#name::#dependents)|*)
             }
         }
 

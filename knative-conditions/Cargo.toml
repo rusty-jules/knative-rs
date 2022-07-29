@@ -9,6 +9,7 @@ description = "Knative status condition types and management."
 
 [dependencies]
 chrono = { version = "0.4.19", features = ["serde"] }
+enumset = { version = "1.0.11", features = ["serde"] }
 schemars = { version = "0.8.10", features = ["chrono"] }
 serde = "1.0.140"
 

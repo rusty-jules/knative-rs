@@ -1,8 +1,9 @@
 use knative_derive::ConditionType;
 use knative_conditions::ConditionType as _;
 use knative_conditions::{ConditionAccessor, Conditions};
+use enumset::EnumSetType;
 
-#[derive(ConditionType, Copy, Clone, Debug, PartialEq)]
+#[derive(ConditionType, EnumSetType, Debug)]
 enum MyCondition {
     Ready,
     #[dependent]
@@ -27,7 +28,7 @@ fn variant_functions_exist() {
 
 #[test]
 fn has_dependents() {
-    assert_eq!([MyCondition::SinkProvided], MyCondition::dependents());
+    assert_eq!(MyCondition::SinkProvided, MyCondition::dependents());
 }
 
 #[test]
