@@ -382,10 +382,8 @@ impl<'a, C: ConditionType> ConditionManager<'a, C> {
         // set happy condition to false if another dependent is false, otherwise set happy
         // condition to unknown if this condition is a dependent
         if let Some(dependent) = self.find_unhappy_dependent() {
-            if dependent.is_false() {
-                if !self.get_top_level_condition().is_false() {
-                    self.mark_false(C::happy(), reason, message);
-               }
+            if dependent.is_false() && self.is_happy() {
+                self.mark_false(C::happy(), reason, message);
             }
         } else if condition_type.is_terminal() {
            self.conditions.mark_unknown(C::happy(), reason.to_string(), message);
