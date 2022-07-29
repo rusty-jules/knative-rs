@@ -209,7 +209,9 @@ mod test {
         let mut status = MyCustomStatus {
             source_status: SourceStatus::default()
         };
-        status.source_status.mark_sink("http://url".parse().unwrap());
+        let uri = "http://url".parse::<url::Url>().unwrap();
+        status.source_status.mark_sink(uri.clone());
+        assert_eq!(status.source_status.sink_uri, Some(uri));
     }
 
     #[test]
@@ -296,6 +298,8 @@ mod test {
         let mut status = MyCustomStatus {
             source_status: SourceStatus::default()
         };
-        status.mark_sink("http://url".parse().unwrap());
+        let uri = "http://url".parse::<url::Url>().unwrap();
+        status.mark_sink(uri.clone());
+        assert_eq!(status.source_status.sink_uri, Some(uri));
     }
 }
