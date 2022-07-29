@@ -53,11 +53,11 @@ async fn reconcile(my_resource: Arc<MySource>, ctx: Context<Data>) -> Result<Act
         // ...patch the new status with the api
     }
 
-    Ok(Action::requeue(std::time::Duration::from_secs( 60 * 60)))
+    Ok(Action::requeue(std::time::Duration::from_secs(60 * 60)))
 }
 ```
 
-Additionaly reference usage of this crate is currently WIP!
+Additional reference usage of this crate is currently WIP!
 
 [knative]: https://knative.dev/docs/
 [keventing]: https://github.com/knative/eventing
