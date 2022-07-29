@@ -212,6 +212,7 @@ mod test {
         let uri = "http://url".parse::<url::Url>().unwrap();
         status.source_status.mark_sink(uri.clone());
         assert_eq!(status.source_status.sink_uri, Some(uri));
+        assert_eq!(status.manager().get_condition(MyCondition::SinkProvided).map(|c| c.is_true()), Some(true))
     }
 
     #[test]
@@ -301,5 +302,6 @@ mod test {
         let uri = "http://url".parse::<url::Url>().unwrap();
         status.mark_sink(uri.clone());
         assert_eq!(status.source_status.sink_uri, Some(uri));
+        assert_eq!(status.manager().get_condition(MyCondition::SinkProvided).map(|c| c.is_true()), Some(true))
     }
 }

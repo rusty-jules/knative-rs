@@ -158,30 +158,29 @@ impl<C: ConditionType> PartialOrd for Condition<C> {
 }
 
 impl<C: ConditionType> Condition<C> {
-    fn new(type_: C) -> Self {
+    pub fn new(type_: C) -> Self {
         Condition {
             type_,
             ..Default::default()
         }
     }
 
-    fn with_status(type_: C, status: ConditionStatus) -> Condition<C> {
+    pub fn with_status(type_: C, status: ConditionStatus) -> Condition<C> {
         Condition {
             status,
             ..Condition::new(type_)
         }
     }
 
-    fn is_true(&self) -> bool {
+    pub fn is_true(&self) -> bool {
         self.status == ConditionStatus::True
     }
 
-    fn is_false(&self) -> bool {
+    pub fn is_false(&self) -> bool {
         self.status == ConditionStatus::False
     }
 
-    #[allow(dead_code)]
-    fn is_unknown(&self) -> bool {
+    pub fn is_unknown(&self) -> bool {
         self.status == ConditionStatus::Unknown
     }
 }

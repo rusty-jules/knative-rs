@@ -88,11 +88,10 @@ mod test {
         let _status = CustomStatus {
             status: Status {
                 conditions: Some(Conditions::with_conditions(vec![
-                    Condition {
-                        type_: CustomCondition::Succeeded,
-                        status: ConditionStatus::True,
-                        ..Default::default()
-                    }
+                    Condition::with_status(
+                        CustomCondition::Succeeded,
+                        ConditionStatus::True
+                    )
                 ])),
                 ..Default::default()
             }
@@ -107,11 +106,10 @@ mod test {
         let _status = CustomStatus {
             status: Status {
                 conditions: Some(Conditions::with_conditions(vec![
-                    Condition {
-                        type_: CustomCondition::SomethingElse,
-                        status: ConditionStatus::True,
-                        ..Default::default()
-                    }
+                    Condition::with_status(
+                        CustomCondition::SomethingElse,
+                        ConditionStatus::True
+                    )
                 ])),
                 ..Default::default()
             }
