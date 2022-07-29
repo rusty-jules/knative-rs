@@ -18,3 +18,4 @@ path = "tests/test.rs"
 quote = "1.0.20"
 syn = { version = "1.0.98", features = ["extra-traits"] }
 knative-conditions = { path = "../knative-conditions", version = "0.1.0" }
+proc-macro2 = "1.0.42"
