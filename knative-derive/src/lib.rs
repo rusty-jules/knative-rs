@@ -42,3 +42,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         Err(e) => e.to_compile_error().into()
     }
 }
+
+// Shout out to @johnhoo for his excellent proc macro tutorial!
+// This probably would have been too scary to attempt without it:
+// https://youtu.be/geovSK3wMB8
