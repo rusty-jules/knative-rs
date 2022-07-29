@@ -208,15 +208,11 @@ impl<C: ConditionType> Conditions<C> {
             conditions.iter().any(|c| c.type_ == C::happy()),
             "Conditions must be initialized with the happy ConditionType"
         );
-        conditions.iter()
-            .fold(EnumSet::new(), |mut acc, c| {
-                assert!(
-                    !acc.contains(c.type_),
-                    "ConditionType must be unique to each Condition"
-                );
-                acc.insert(c.type_);
-                acc
-            });
+        assert_eq!(
+            EnumSet::from_iter(conditions.iter().map(|c| c.type_)).len(),
+            conditions.len(),
+            "ConditionType must be unique to each Condition"
+        );
         Conditions(conditions)
     }
 
