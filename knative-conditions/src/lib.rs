@@ -13,12 +13,14 @@ where Self: 'static {
     fn dependents() -> &'static [Self];
 
     /// Whether the [`ConditionType`] determines happiness.
+    #[inline]
     fn is_terminal(&self) -> bool {
         Self::dependents().contains(self) || *self == Self::happy()
     }
 
     /// A [`Condition`] severity defaults to whether it determines overall resource readiness or
     /// not.
+    #[inline]
     fn severity(&self) -> ConditionSeverity {
         if self.is_terminal() {
             ConditionSeverity::Error
