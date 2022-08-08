@@ -64,7 +64,7 @@ mod test {
         status.mark_somethingelse();
         assert_eq!(status.is_ready(), true);
 
-        // marking non_dependent status as not true does not make status ready
+        // marking non_dependent status as not true does not make status not ready
         status.mark_not_somethingelse("NotSomethingElse", None);
         assert_eq!(status.is_ready(), true);
 

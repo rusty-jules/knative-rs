@@ -31,7 +31,8 @@ pub struct Destination {
     /// Ref points to an Addressable.
     #[serde(rename = "ref")]
     ref_: Option<KReference>,
-    /// URI can be an absolute URL(non-empty scheme and non-empty host) pointing to the target or a relative URI. Relative URIs will be resolved using the base URI retrieved from Ref.
+    /// URI can be an absolute URL(non-empty scheme and non-empty host) pointing to the target or a relative URI.
+    /// Relative URIs will be resolved using the base URI retrieved from Ref.
     pub uri: Option<url::Url>,
 }
 
