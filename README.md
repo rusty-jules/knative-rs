@@ -1,5 +1,8 @@
 # Knative
 
+[![CI](https://github.com/rusty-jules/knative-rs/actions/workflows/ci.yaml/badge.svg)](https://github.com/rusty-jules/knative-rs/actions/workflows/ci.yaml)
+[![Crates.io](https://img.shields.io/crates/v/knative)](https://crates.io/crates/knative)
+
 A Rust implementation of [Knative][knative] and [Knative Eventing][keventing] custom resource defintions and objects, leveraging [kube-rs][kubers].
 
 This implementation is *incomplete* and should be considered pre-alpha. It contains only a small subset of the full specification.
