@@ -101,6 +101,7 @@ pub fn inner_derive(ast: DeriveInput) -> Result<TokenStream> {
         #[automatically_derived]
         impl #condition_type_name for #name {
             #(
+                #[inline]
                 fn #lower_case_again() -> Self {
                     #name::#capitalized
                 }
@@ -109,10 +110,12 @@ pub fn inner_derive(ast: DeriveInput) -> Result<TokenStream> {
 
         #[automatically_derived]
         impl ::knative_conditions::ConditionType for #name {
+            #[inline]
             fn happy() -> Self {
                 #name::#happy
             }
 
+            #[inline]
             fn dependents() -> &'static [Self] {
                 &[#(#name::#dependents),*]
             }

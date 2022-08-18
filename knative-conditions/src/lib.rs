@@ -13,12 +13,14 @@ where Self: 'static {
     fn dependents() -> &'static [Self];
 
     /// Whether the [`ConditionType`] determines happiness.
+    #[inline]
     fn is_terminal(&self) -> bool {
         Self::dependents().contains(self) || *self == Self::happy()
     }
 
     /// A [`Condition`] severity defaults to whether it determines overall resource readiness or
     /// not.
+    #[inline]
     fn severity(&self) -> ConditionSeverity {
         if self.is_terminal() {
             ConditionSeverity::Error
@@ -158,36 +160,35 @@ impl<C: ConditionType> PartialOrd for Condition<C> {
 }
 
 impl<C: ConditionType> Condition<C> {
-    fn new(type_: C) -> Self {
+    pub fn new(type_: C) -> Self {
         Condition {
             type_,
             ..Default::default()
         }
     }
 
-    fn with_status(type_: C, status: ConditionStatus) -> Condition<C> {
+    pub fn with_status(type_: C, status: ConditionStatus) -> Condition<C> {
         Condition {
             status,
             ..Condition::new(type_)
         }
     }
 
-    fn is_true(&self) -> bool {
+    pub fn is_true(&self) -> bool {
         self.status == ConditionStatus::True
     }
 
-    fn is_false(&self) -> bool {
+    pub fn is_false(&self) -> bool {
         self.status == ConditionStatus::False
     }
 
-    #[allow(dead_code)]
-    fn is_unknown(&self) -> bool {
+    pub fn is_unknown(&self) -> bool {
         self.status == ConditionStatus::Unknown
     }
 }
 
 /// A `Vec<Condition>` that maintains transition times.
-#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, PartialEq)]
 pub struct Conditions<C: ConditionType>(Vec<Condition<C>>);
 
 impl<C: ConditionType> Default for Conditions<C> {
