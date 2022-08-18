@@ -38,8 +38,10 @@ impl<C: ConditionType> ConditionAccessor<C> for Status<C> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use knative_derive::ConditionType;
+    use enumset::EnumSetType;
 
-    #[derive(knative_derive::ConditionType, Copy, Clone, Debug, PartialEq)]
+    #[derive(ConditionType, EnumSetType, Debug)]
     enum CustomCondition {
         Succeeded,
         SomethingElse
