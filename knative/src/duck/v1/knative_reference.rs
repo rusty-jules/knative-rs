@@ -1,4 +1,5 @@
-use crate::error::{Error, DiscoveryError};
+use crate::duck::v1 as duckv1;
+use crate::error::Error;
 use k8s_openapi::api::core::v1::ObjectReference;
 use kube::{
     api::{DynamicObject, GroupVersionKind},
@@ -51,16 +52,22 @@ impl KReference {
         &self,
         client: kube::Client,
     ) -> Result<url::Url, Error> {
-        // let object_reference: ObjectReference = self.clone().into();
+        let KReference {
+            group,
+            api_version,
+            namespace,
+            kind,
+            name,
+            ..
+        } = self;
         let gvk = GroupVersionKind::gvk(
-            self.group.as_ref().unwrap(),
-            self.api_version.as_ref().unwrap(),
-            &self.kind,
+            group.as_ref().unwrap(),
+            api_version.as_ref().unwrap(),
+            kind,
         );
         let (ar, _caps) = discovery::pinned_kind(&client, &gvk).await?;
-        let api: Api<DynamicObject> = Api::all_with(client.clone(), &ar);
-        let _obj = api.get(&self.name).await?;
-        // TODO: into duckv1.AddressableType is not implemented yet.
-        unimplemented!("see knative.dev/pkg/resolver/addressable_resolver.go")
+        let api: Api<DynamicObject> = Api::namespaced_with(client.clone(), namespace.as_ref().unwrap(), &ar);
+        let _obj = api.get(name).await?;
+        Ok(duckv1::addressable_type::AddressableType::try_get_uri(_obj).await?)
     }
 }
