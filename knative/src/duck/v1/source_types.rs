@@ -35,7 +35,7 @@ pub struct Destination {
     /// URI can be an absolute URL(non-empty scheme and non-empty host) pointing to the target or a relative URI.
     /// Relative URIs will be resolved using the base URI retrieved from Ref.
     // url::Url schemars definition denotes the "uri" json schema type
-    #[schemars(with = "url::Url")]
+    #[schemars(with = "Option<url::Url>")]
     #[serde(default, with = "uri_serde")]
     pub uri: Option<http::Uri>,
 }
