@@ -33,7 +33,33 @@ pub struct Destination {
     ref_: Option<KReference>,
     /// URI can be an absolute URL(non-empty scheme and non-empty host) pointing to the target or a relative URI.
     /// Relative URIs will be resolved using the base URI retrieved from Ref.
-    pub uri: Option<url::Url>,
+    // url::Url schemars definition denotes the "uri" json schema type
+    #[schemars(with = "url::Url")]
+    #[serde(default, with = "uri_serde")]
+    pub uri: Option<http::Uri>,
+}
+
+/// A version of [`http_serde::uri`](https://gitlab.com/kornelski/http-serde) with Option support
+/// following [serde #1301](https://github.com/serde-rs/serde/issues/1301).
+mod uri_serde {
+    use http::Uri;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(uri: &Option<Uri>, ser: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct Helper<'a>(#[serde(with = "http_serde::uri")] &'a Uri);
+        uri.as_ref().map(Helper).serialize(ser)
+    }
+
+    pub fn deserialize<'de, D>(de: D) -> Result<Option<Uri>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Helper(#[serde(with = "http_serde::uri")] Uri);
+        let helper = Option::deserialize(de)?;
+        Ok(helper.map(|Helper(uri)| uri))
+    }
 }
 
 impl From<KReference> for Destination {
@@ -61,7 +87,7 @@ impl From<url::Url> for Destination {
     fn from(uri: url::Url) -> Self {
         Destination {
             ref_: None,
-            uri: Some(uri),
+            uri: Some(uri.as_str().parse::<http::Uri>().unwrap()),
         }
     }
 }
@@ -72,11 +98,14 @@ impl Destination {
         client: kube::Client,
     ) -> Result<url::Url, Error> {
         match (&self.ref_, &self.uri) {
-            (Some(ref ref_), _) => {
-                let url = ref_.resolve_uri(client).await?;
+            (Some(ref ref_), uri) => {
+                let mut url = ref_.resolve_uri(client).await?;
+                if let Some(uri) = uri {
+                    url.set_path(uri.path());
+                }
                 Ok(url)
             }
-            (None, Some(ref uri)) => Ok(uri.clone()),
+            (None, Some(uri)) => Ok(url::Url::parse(uri.to_string().as_str())?),
             (None, None) => Err(Error::Discovery(DiscoveryError::EmptyDestination)),
         }
     }

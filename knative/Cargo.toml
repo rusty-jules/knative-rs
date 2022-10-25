@@ -20,6 +20,8 @@ serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.79"
 thiserror = "1.0.30"
 url = { version = "2.2.2", features = ["serde"] }
+http = "0.2"
+http-serde = "1.1.2"
 
 [dev-dependencies]
 kube = { version = "0.70.0", features = ["derive", "runtime", "client"] }
