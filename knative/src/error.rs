@@ -1,3 +1,4 @@
+use crate::duck::v1::knative_reference::KRefError;
 use thiserror::Error;
 use kube::error::Error as KubeError;
 use url::ParseError as UrlParseError;
@@ -19,8 +20,8 @@ pub enum Error {
 pub enum DiscoveryError {
     #[error("destination missing Ref and URI, expected at least one")]
     EmptyDestination,
-    #[error("resolve kreference is not implemented")]
-    ResolveKReferenceNotImplemented,
+    #[error("malformed kreference {0}")]
+    KReference(#[from] KRefError),
     #[error("{0} ({1}) is not an AddressableType")]
     NotAddressableType(String, String),
     #[error("URL missing in address of {0}")]
