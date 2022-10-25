@@ -14,7 +14,7 @@ pub struct Addressable<'a> {
 
 #[derive(Deserialize)]
 pub struct AddressableStatus<'a> {
-    pub addressable: Addressable<'a>,
+    pub address: Addressable<'a>,
 }
 
 #[derive(Deserialize)]
@@ -63,7 +63,7 @@ impl<'a> AddressableType<'a> {
                         // The type must contain the fields on an Addressable
                         let addressable: AddressableType = serde_json::from_value(obj.data)
                             .map_err(|_| DiscoveryError::NotAddressableType(name.clone(), t.kind.clone()))?;
-                        addressable.status.addressable.url
+                        addressable.status.address.url
                             .into_owned()
                             .ok_or(DiscoveryError::UrlNotSetOnAddressable(name))
                     }
