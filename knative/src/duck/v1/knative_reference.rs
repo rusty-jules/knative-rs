@@ -1,5 +1,6 @@
-use crate::duck::v1 as duckv1;
-use crate::error::Error;
+use super::addressable_type::AddressableType;
+use crate::error::{DiscoveryError, Error};
+use thiserror::Error;
 use k8s_openapi::api::core::v1::ObjectReference;
 use kube::{
     api::{DynamicObject, GroupVersionKind},
@@ -7,6 +8,14 @@ use kube::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, Error, Clone, Copy)]
+pub enum KRefError {
+    #[error("apiVersion is incomplete or group does not exist")]
+    MalformedGVK,
+    #[error("must be namespaced")]
+    MustBeNamespaced,
+}
 
 /// KReference contains enough information to refer to another object.
 /// It's a trimmed down version of corev1.ObjectReference.
@@ -59,14 +68,31 @@ impl KReference {
             name,
             ..
         } = self;
+
+        let ns = namespace.as_ref()
+            .ok_or(DiscoveryError::KReference(KRefError::MustBeNamespaced))?;
+
+        let (group, api_version) = match (group, api_version) {
+            (Some(group), Some(api_version)) => {
+                (group.as_str(), api_version.as_str())
+            }
+            (None, Some(api_version)) if api_version.contains("/") => {
+                let mut iter = api_version.split("/");
+                (iter.next().unwrap(), iter.next().unwrap())
+            },
+            _ => Err(DiscoveryError::KReference(KRefError::MalformedGVK))?
+        };
+
         let gvk = GroupVersionKind::gvk(
-            group.as_ref().unwrap(),
-            api_version.as_ref().unwrap(),
+            group,
+            api_version,
             kind,
         );
+
         let (ar, _caps) = discovery::pinned_kind(&client, &gvk).await?;
-        let api: Api<DynamicObject> = Api::namespaced_with(client.clone(), namespace.as_ref().unwrap(), &ar);
-        let _obj = api.get(name).await?;
-        Ok(duckv1::addressable_type::AddressableType::try_get_uri(_obj).await?)
+        let api: Api<DynamicObject> = Api::namespaced_with(client.clone(), ns, &ar);
+        let obj = api.get(name).await?;
+
+        Ok(AddressableType::try_get_uri(obj).await?)
     }
 }
