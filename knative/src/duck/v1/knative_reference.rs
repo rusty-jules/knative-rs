@@ -3,8 +3,7 @@ use crate::error::Error;
 use k8s_openapi::api::core::v1::ObjectReference;
 use kube::{
     api::{DynamicObject, GroupVersionKind},
-    core::object,
-    discovery, Api, ResourceExt,
+    discovery, Api,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

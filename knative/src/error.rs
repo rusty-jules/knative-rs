@@ -1,5 +1,6 @@
 use thiserror::Error;
 use kube::error::Error as KubeError;
+use url::ParseError as UrlParseError;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -9,6 +10,9 @@ pub enum Error {
     /// Kube errors
     #[error("Error: {0}")]
     KubeError(#[from] KubeError),
+    /// Url errors
+    #[error("Error invalid url: {0}")]
+    UrlParseError(#[from] UrlParseError)
 }
 
 #[derive(Error, Debug, Clone)]
