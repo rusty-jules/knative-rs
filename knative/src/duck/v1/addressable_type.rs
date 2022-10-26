@@ -75,3 +75,59 @@ impl<'a> AddressableType<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::fs;
+
+    fn mock_path() -> String {
+        format!("{}/{}/",
+            env!("CARGO_MANIFEST_DIR"),
+            "../test/mock",
+        )
+    }
+
+    fn setup_kubeconfig() {
+        std::env::set_var("KUBECONFIG", mock_path() + "kubeconfig.yaml");
+    }
+
+    fn read_mock(filename: &str) -> DynamicObject {
+        let path = mock_path() + filename;
+        let yaml = fs::read_to_string(path).expect("path to mock");
+        serde_yaml::from_str(&yaml).unwrap()
+    }
+
+    #[test]
+    fn broker_is_addressable() {
+        let broker = read_mock("default_broker.yaml");
+        assert!(AddressableType::is_addressable(broker));
+    }
+
+    #[test]
+    fn service_is_addressable() {
+        let service = read_mock("default_service.yaml");
+        assert!(AddressableType::is_addressable(service));
+    }
+
+    #[async_std::test]
+    async fn broker_uri() {
+        setup_kubeconfig();
+        let broker = read_mock("default_broker.yaml");
+        let uri = AddressableType::try_get_uri(broker).await.expect("broker is addressable");
+        assert_eq!(uri.scheme(), "http");
+        assert_eq!(uri.host().unwrap().to_string(), "broker-ingress.default.svc.cluster.local");
+        assert_eq!(uri.path(), "/default/default");
+    }
+
+    #[async_std::test]
+    async fn service_uri() {
+        setup_kubeconfig();
+        let service = read_mock("default_service.yaml");
+        let uri = AddressableType::try_get_uri(service).await.expect("to read config");
+        assert_eq!(uri.scheme(), "http");
+        assert_eq!(uri.host().unwrap().to_string(), "default.default.svc.cluster.local");
+        assert_eq!(uri.path(), "/");
+    }
+}
+
