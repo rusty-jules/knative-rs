@@ -25,4 +25,6 @@ http = "0.2"
 http-serde = "1.1.2"
 
 [dev-dependencies]
+async-std = { version = "1.12.0", features = ["attributes"] }
 kube = { version = "0.70.0", features = ["derive", "runtime", "client"] }
+serde_yaml = "0.9.14"
