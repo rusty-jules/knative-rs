@@ -1,5 +1,5 @@
 use super::addressable_type::AddressableType;
-use crate::error::{DiscoveryError, Error};
+use crate::error::Error;
 use thiserror::Error;
 use k8s_openapi::api::core::v1::ObjectReference;
 use kube::{
@@ -10,7 +10,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Error, Clone, Copy)]
-pub enum KRefError {
+pub enum KRefErr {
     #[error("apiVersion is incomplete or group does not exist")]
     MalformedGVK,
     #[error("must be namespaced")]
@@ -70,17 +70,17 @@ impl KReference {
         } = self;
 
         let ns = namespace.as_ref()
-            .ok_or(DiscoveryError::KReference(KRefError::MustBeNamespaced))?;
+            .ok_or(KRefErr::MustBeNamespaced)?;
 
         let (group, api_version) = match (group, api_version) {
             (Some(group), Some(api_version)) => {
                 (group.as_str(), api_version.as_str())
             }
-            (None, Some(api_version)) if api_version.contains("/") => {
-                let mut iter = api_version.split("/");
+            (None, Some(api_version)) if api_version.contains('/') => {
+                let mut iter = api_version.split('/');
                 (iter.next().unwrap(), iter.next().unwrap())
             },
-            _ => Err(DiscoveryError::KReference(KRefError::MalformedGVK))?
+            _ => Err(KRefErr::MalformedGVK)?
         };
 
         let gvk = GroupVersionKind::gvk(
@@ -93,6 +93,6 @@ impl KReference {
         let api: Api<DynamicObject> = Api::namespaced_with(client.clone(), ns, &ar);
         let obj = api.get(name).await?;
 
-        Ok(AddressableType::try_get_uri(obj).await?)
+        AddressableType::try_get_uri(obj).await
     }
 }

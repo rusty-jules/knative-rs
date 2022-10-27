@@ -1,11 +1,20 @@
-use crate::error::DiscoveryError;
+use crate::error::Error;
 
 use kube::Config;
 use kube::api::DynamicObject;
+use thiserror::Error;
 use url::Url;
 use serde::Deserialize;
 
 use std::borrow::Cow;
+
+#[derive(Error, Debug, Clone)]
+pub enum AddressableErr {
+    #[error("{0} ({1}) is not an AddressableType")]
+    NotAddressable(String, String),
+    #[error("URL missing in address of {0}")]
+    UrlNotSet(String)
+}
 
 #[derive(Deserialize)]
 pub struct Addressable<'a> {
@@ -27,17 +36,14 @@ impl<'a> AddressableType<'a> {
         match obj.types {
             Some(t) => match (t.api_version.as_ref(), t.kind.as_ref()) {
                 ("v1", "Service") => true,
-                _ => match serde_json::from_value::<AddressableType>(obj.data) {
-                    Ok(_) => true,
-                    Err(_) => false
-                }
+                _ => serde_json::from_value::<AddressableType>(obj.data).is_ok()
             }
             None => false
         }
     }
 
-    pub async fn try_get_uri(obj: DynamicObject) -> Result<url::Url, DiscoveryError> {
-        let name = obj.metadata.name.unwrap_or("".into());
+    pub async fn try_get_uri(obj: DynamicObject) -> Result<url::Url, Error> {
+        let name = obj.metadata.name.unwrap_or_else(|| "".into());
         let namespace = obj.metadata.namespace.as_ref().unwrap();
 
         match obj.types {
@@ -62,15 +68,15 @@ impl<'a> AddressableType<'a> {
                     _ => {
                         // The type must contain the fields on an Addressable
                         let addressable: AddressableType = serde_json::from_value(obj.data)
-                            .map_err(|_| DiscoveryError::NotAddressableType(name.clone(), t.kind.clone()))?;
-                        addressable.status.address.url
+                            .map_err(|_| AddressableErr::NotAddressable(name.clone(), t.kind.clone()))?;
+                        Ok(addressable.status.address.url
                             .into_owned()
-                            .ok_or(DiscoveryError::UrlNotSetOnAddressable(name))
+                            .ok_or(AddressableErr::UrlNotSet(name))?)
                     }
                 }
             }
             None => {
-                Err(DiscoveryError::NotAddressableType(name, "unknown".into()))
+                Err(AddressableErr::NotAddressable(name, "unknown".into()))?
             }
         }
     }

@@ -5,7 +5,8 @@ use super::{
 };
 use knative_conditions::{ConditionAccessor, Conditions};
 use crate::derive::ConditionType;
-use crate::error::{DiscoveryError, Error};
+use crate::error::Error;
+use thiserror::Error;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +24,12 @@ impl SourceSpec {
     pub fn ce_overrides(&self) -> Option<CloudEventOverrides> {
         self.ce_overrides.clone()
     }
+}
+
+#[derive(Error, Debug, Clone, Copy)]
+pub enum DestinationErr {
+    #[error("destination missing Ref and URI, expected at least one")]
+    Empty,
 }
 
 /// Destination represents a target of an invocation over HTTP.
@@ -68,7 +75,7 @@ impl From<KReference> for Destination {
             ref_: Some(KReference {
                 // combine the group and api_version, handling the case that this was done already
                 api_version: match (reference.api_version, reference.group) {
-                    (Some(api_version), _) if api_version.contains("/") => Some(api_version),
+                    (Some(api_version), _) if api_version.contains('/') => Some(api_version),
                     (Some(api_version), Some(group)) => Some(group + "/" + &api_version),
                     (Some(api_version), None) => Some(api_version),
                     (None, _) => None,
@@ -84,10 +91,10 @@ impl From<KReference> for Destination {
 }
 
 impl From<url::Url> for Destination {
-    fn from(uri: url::Url) -> Self {
+    fn from(url: url::Url) -> Self {
         Destination {
             ref_: None,
-            uri: Some(uri.as_str().parse::<http::Uri>().unwrap()),
+            uri: Some(url.as_str().parse::<http::Uri>().unwrap()),
         }
     }
 }
@@ -106,7 +113,7 @@ impl Destination {
                 Ok(url)
             }
             (None, Some(uri)) => Ok(url::Url::parse(uri.to_string().as_str())?),
-            (None, None) => Err(Error::Discovery(DiscoveryError::EmptyDestination)),
+            (None, None) => Err(DestinationErr::Empty)?,
         }
     }
 }
