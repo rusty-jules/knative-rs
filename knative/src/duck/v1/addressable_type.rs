@@ -6,32 +6,45 @@ use thiserror::Error;
 use url::Url;
 use serde::Deserialize;
 
-use std::borrow::Cow;
-
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Debug)]
 pub enum AddressableErr {
     #[error("{0} ({1}) is not an AddressableType")]
     NotAddressable(String, String),
     #[error("URL missing in address of {0}")]
-    UrlNotSet(String)
+    UrlNotSet(String),
+    #[error("Service must have name to be addressable")]
+    ServiceMustHaveName,
+    #[error("Service must have namespace")]
+    ServiceMustHaveNamespace,
+    #[error("Unable to find Kubeconfig: {0}")]
+    KubeconfigErr(#[from] kube::config::KubeconfigError)
+}
+
+impl AddressableErr {
+    fn not_addressable(DynamicObject { metadata, types, .. }: DynamicObject) -> Self {
+        Self::NotAddressable(
+            metadata.name.as_ref().map(|n| n.clone()).unwrap_or_else(|| "".to_string()),
+            types.as_ref().map(|t| t.kind.clone()).unwrap_or_else(|| "unknown".to_string())
+        )
+    }
 }
 
 #[derive(Deserialize)]
-pub struct Addressable<'a> {
-    pub url: Cow<'a, Option<Url>>,
+pub struct Addressable {
+    pub url: Option<Url>
 }
 
 #[derive(Deserialize)]
-pub struct AddressableStatus<'a> {
-    pub address: Addressable<'a>,
+pub struct AddressableStatus {
+    pub address: Addressable,
 }
 
 #[derive(Deserialize)]
-pub struct AddressableType<'a> {
-    pub status: AddressableStatus<'a>
+pub struct AddressableType {
+    pub status: AddressableStatus
 }
 
-impl<'a> AddressableType<'a> {
+impl AddressableType {
     pub fn is_addressable(obj: DynamicObject) -> bool {
         match obj.types {
             Some(t) => match (t.api_version.as_ref(), t.kind.as_ref()) {
@@ -69,15 +82,88 @@ impl<'a> AddressableType<'a> {
                         // The type must contain the fields on an Addressable
                         let addressable: AddressableType = serde_json::from_value(obj.data)
                             .map_err(|_| AddressableErr::NotAddressable(name.clone(), t.kind.clone()))?;
-                        Ok(addressable.status.address.url
-                            .into_owned()
-                            .ok_or(AddressableErr::UrlNotSet(name))?)
+                        Ok(addressable.status.address.url.ok_or(AddressableErr::UrlNotSet(name))?)
                     }
                 }
             }
             None => {
                 Err(AddressableErr::NotAddressable(name, "unknown".into()))?
             }
+        }
+    }
+}
+
+fn extract_url_from_value(v: &serde_json::Value) -> Option<Url> {
+    if let Some(data) = v.as_object() {
+        if data.contains_key("status") {
+            if let Some(status) = data["status"].as_object() {
+                if status.contains_key("address") {
+                    if let Some(address) = status["address"].as_object() {
+                        if address.contains_key("url") && address["url"].as_str().is_some() {
+                            return match address["url"].as_str().map(Url::parse) {
+                                Some(Ok(url)) => Some(url),
+                                None | Some(Err(_)) => None
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+impl TryInto<AddressableType> for DynamicObject {
+    type Error = AddressableErr;
+    fn try_into(self) -> Result<AddressableType, Self::Error> {
+        let name = self.metadata.name.as_ref().ok_or(AddressableErr::ServiceMustHaveName)?;
+        let namespace = self.metadata.namespace.as_ref().ok_or(AddressableErr::ServiceMustHaveNamespace)?;
+        match &self.types {
+            Some(t) => match (t.api_version.as_ref(), t.kind.as_ref()) {
+                ("v1", "Service") => {
+                    let cluster_url_host = {
+                        // Copied straight from kube_client::config::file_loader to avoid async
+                        // params
+                        let config = kube::config::Kubeconfig::read()?;
+                        let context_name = match &config.current_context {
+                            Some(name) => name,
+                            None => Err(kube::config::KubeconfigError::CurrentContextNotSet)?
+                        };
+                        let current_context = config
+                            .contexts
+                            .iter()
+                            .find(|named_context| &named_context.name == context_name)
+                            .map(|named_context| &named_context.context)
+                            .ok_or_else(|| kube::config::KubeconfigError::LoadContext(context_name.clone()))?;
+                        let cluster_name = &current_context.cluster;
+                        let cluster = config
+                            .clusters
+                            .iter()
+                            .find(|named_cluster| &named_cluster.name == cluster_name)
+                            .map(|named_cluster| &named_cluster.cluster)
+                            .ok_or_else(|| kube::config::KubeconfigError::LoadClusterOfContext(cluster_name.clone()))?;
+                        let cluster_url = cluster
+                            .server
+                            .parse::<http::Uri>()
+                            .map_err(kube::config::KubeconfigError::ParseClusterUrl)?;
+                        cluster_url
+                    };
+                    // Construct the uri from the service metadata
+                    let url = Url::parse(
+                        &format!("http://{name}.{namespace}.svc.{cluster_url_host}")
+                    ).expect("valid url from service and config");
+                    Ok(AddressableType {
+                        status: AddressableStatus {
+                            address: Addressable {
+                                url: Some(url)
+                            }
+                        }
+                    })
+                }
+                _ => serde_json::from_value::<AddressableType>(self.data)
+                        .map_err(|_| AddressableErr::NotAddressable(name.clone(), t.kind.clone()))
+            }
+            None => Err(AddressableErr::not_addressable(self))
         }
     }
 }
