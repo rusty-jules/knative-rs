@@ -1,4 +1,4 @@
-use super::addressable_type::{AddressableType, AddressableErr};
+use super::addressable_type::AddressableTypeExt;
 use crate::error::Error;
 use thiserror::Error;
 use k8s_openapi::api::core::v1::ObjectReference;
@@ -90,10 +90,10 @@ impl KReference {
         );
 
         let (ar, _caps) = discovery::pinned_kind(&client, &gvk).await?;
-        let api: Api<DynamicObject> = Api::namespaced_with(client.clone(), ns, &ar);
+        let api = Api::<DynamicObject>::namespaced_with(client.clone(), ns, &ar);
         let obj = api.get(name).await?;
+        let url = obj.try_get_address().await?;
 
-        let addressable: AddressableType = obj.try_into()?;
-        Ok(addressable.status.address.url.ok_or(AddressableErr::UrlNotSet(name.into()))?)
+        Ok(url)
     }
 }

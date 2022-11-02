@@ -23,6 +23,7 @@ url = { version = "2.2.2", features = ["serde"] }
 enumset = { version = "1.0.11", features = ["serde"] }
 http = "0.2"
 http-serde = "1.1.2"
+async-trait = "0.1.58"
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
