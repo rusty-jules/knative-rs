@@ -11,17 +11,17 @@ use serde::Deserialize;
 pub enum AddressableErr {
     #[error("{0} ({1}) is not an AddressableType")]
     NotAddressable(String, String),
-    #[error("URL missing in address of {0}")]
+    #[error("url missing in address of {0}")]
     UrlNotSet(String),
-    #[error("Service must have name to be addressable")]
+    #[error("service must have name to be addressable")]
     ServiceMustHaveName,
-    #[error("Service must have namespace")]
+    #[error("service must have namespace")]
     ServiceMustHaveNamespace,
-    #[error("Unable to infer Kubeconfig: {0}")]
-    InferConfigError(#[from] kube::config::InferConfigError),
-    #[error("Unable to find Kubeconfig: {0}")]
+    #[error("unable to infer Kubeconfig: {0}")]
+    InferConfigErr(#[from] kube::config::InferConfigError),
+    #[error("unable to find Kubeconfig: {0}")]
     KubeconfigErr(#[from] kube::config::KubeconfigError),
-    #[error("Unable to parse url: {0}")]
+    #[error("unable to parse url: {0}")]
     UrlParseErr(#[from] url::ParseError)
 }
 
