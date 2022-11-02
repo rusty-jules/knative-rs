@@ -92,7 +92,7 @@ impl KReference {
         let (ar, _caps) = discovery::pinned_kind(&client, &gvk).await?;
         let api = Api::<DynamicObject>::namespaced_with(client.clone(), ns, &ar);
         let obj = api.get(name).await?;
-        let url = obj.try_get_address().await?;
+        let url = obj.address().await?;
 
         Ok(url)
     }

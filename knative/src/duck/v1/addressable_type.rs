@@ -15,8 +15,6 @@ pub enum AddressableErr {
     UrlNotSet(String),
     #[error("service must have name to be addressable")]
     ServiceMustHaveName,
-    #[error("service must have namespace")]
-    ServiceMustHaveNamespace,
     #[error("unable to infer Kubeconfig: {0}")]
     InferConfigErr(#[from] kube::config::InferConfigError),
     #[error("unable to find Kubeconfig: {0}")]
@@ -41,7 +39,7 @@ pub struct AddressableType {
 }
 
 #[doc(hidden)]
-/// Construct the uri from the service metadata
+/// Construct a url from the service metadata and kubeconfig
 async fn build_service_url(name: &str, namespace: &str) -> Result<Url, AddressableErr> {
     let cluster_url = Config::infer().await?.cluster_url;
     let scheme = cluster_url.scheme().unwrap_or(&http::uri::Scheme::HTTP);
@@ -52,7 +50,7 @@ async fn build_service_url(name: &str, namespace: &str) -> Result<Url, Addressab
 }
 
 #[doc(hidden)]
-/// Parse a url from a &serde_json::Value containing a status. This avoids a clone of data.
+/// Parse a url from a &serde_json::Value containing a status, avoiding a clone of data
 fn parse_url_from_obj_data(name: &str, kind: &str, data: &Value) -> Result<Url, AddressableErr> {
     if let Some(data) = data.as_object() {
         if let Some(status) = data.get("status").and_then(Value::as_object) {
@@ -69,12 +67,12 @@ fn parse_url_from_obj_data(name: &str, kind: &str, data: &Value) -> Result<Url, 
 
 #[async_trait::async_trait]
 pub trait AddressableTypeExt {
-    async fn try_get_address(&self) -> Result<Url, AddressableErr>;
+    async fn address(&self) -> Result<Url, AddressableErr>;
 }
 
 #[async_trait::async_trait]
 impl AddressableTypeExt for AddressableType {
-    async fn try_get_address(&self) -> Result<Url, AddressableErr> {
+    async fn address(&self) -> Result<Url, AddressableErr> {
         self.status.address.url
             .clone()
             .ok_or_else(|| AddressableErr::UrlNotSet("addressable".to_string()))
@@ -83,7 +81,7 @@ impl AddressableTypeExt for AddressableType {
 
 #[async_trait::async_trait]
 impl AddressableTypeExt for DynamicObject {
-    async fn try_get_address(&self) -> Result<Url, AddressableErr> {
+    async fn address(&self) -> Result<Url, AddressableErr> {
         let name = self.meta().name.as_ref().ok_or(AddressableErr::ServiceMustHaveName)?;
         let namespace = self.namespace().unwrap_or_else(|| "default".into());
 
@@ -99,7 +97,7 @@ impl AddressableTypeExt for DynamicObject {
 
 #[async_trait::async_trait]
 impl AddressableTypeExt for Service {
-    async fn try_get_address(&self) -> Result<Url, AddressableErr> {
+    async fn address(&self) -> Result<Url, AddressableErr> {
         let name = self.meta().name.as_ref().ok_or(AddressableErr::ServiceMustHaveName)?;
         let namespace = self.namespace().unwrap_or_else(|| "default".into());
         build_service_url(name, &namespace).await
@@ -133,7 +131,7 @@ mod test {
     #[async_std::test]
     async fn broker_uri() {
         let broker = read_mock::<DynamicObject>("default_broker.yaml");
-        let uri = broker.try_get_address().await.expect("broker is addressable");
+        let uri = broker.address().await.expect("broker is addressable");
         assert_eq!(uri.scheme(), "http");
         assert_eq!(uri.host().unwrap().to_string(), "broker-ingress.default.svc.cluster.local");
         assert_eq!(uri.path(), "/default/default");
@@ -144,7 +142,7 @@ mod test {
         let broker = read_mock::<DynamicObject>("default_broker.yaml");
         let addressable: AddressableType = serde_json::from_value(broker.data)
             .expect("broker status deserializes into AddressableType");
-        let uri = addressable.try_get_address().await
+        let uri = addressable.address().await
             .expect("url set on default broker");
         assert_eq!(uri.scheme(), "http");
         assert_eq!(uri.host().unwrap().to_string(), "broker-ingress.default.svc.cluster.local");
@@ -155,7 +153,7 @@ mod test {
     async fn service_uri() {
         setup_kubeconfig();
         let service = read_mock::<DynamicObject>("default_service.yaml");
-        let uri = service.try_get_address().await.expect("to read config");
+        let uri = service.address().await.expect("to read config");
         assert_eq!(uri.scheme(), "http");
         assert_eq!(uri.host().unwrap().to_string(), "default.default.svc.cluster.local");
         assert_eq!(uri.path(), "/");
@@ -165,7 +163,7 @@ mod test {
     async fn service_struct_uri() {
         setup_kubeconfig();
         let service = read_mock::<Service>("default_service.yaml");
-        let uri = service.try_get_address().await.expect("");
+        let uri = service.address().await.expect("");
         assert_eq!(uri.scheme(), "http");
         assert_eq!(uri.host().unwrap().to_string(), "default.default.svc.cluster.local");
         assert_eq!(uri.path(), "/");
