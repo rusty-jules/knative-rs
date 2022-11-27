@@ -107,8 +107,12 @@ impl Destination {
         match (&self.ref_, &self.uri) {
             (Some(ref ref_), uri) => {
                 let mut url = ref_.resolve_uri(client).await?;
+                // If both ref and uri are specified, uri is relative to ref.
+                // https://github.com/knative/specs/blob/main/specs/eventing/control-plane.md#destination-resolution
                 if let Some(uri) = uri {
-                    url.set_path(uri.path());
+                    url.path_segments_mut()
+                        .expect("KReference url must be base")
+                        .push(uri.path());
                 }
                 Ok(url)
             }
