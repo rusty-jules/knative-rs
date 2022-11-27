@@ -94,6 +94,8 @@ impl KReference {
         let obj = api.get(name).await?;
         let url = obj.address().await?;
 
+        debug_assert!(!url.cannot_be_a_base());
+
         Ok(url)
     }
 }
