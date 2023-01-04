@@ -4,4 +4,5 @@ members = [
     "knative-conditions",
     "knative-derive",
     "knative-eventing",
+    "knative-serving",
 ]

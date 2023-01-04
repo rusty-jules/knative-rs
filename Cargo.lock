@@ -534,6 +534,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "knative-serving"
+version = "0.1.0"
+
+[[package]]
 name = "kube"
 version = "0.70.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
