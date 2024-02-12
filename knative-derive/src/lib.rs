@@ -17,8 +17,9 @@ const REQUIRED_VARIANTS: [&str; 2] = ["Ready", "Succeeded"];
 /// # Example
 /// ```rust
 /// use knative_derive::ConditionType;
+/// use enumset::EnumSetType;
 ///
-/// #[derive(ConditionType, Debug, Copy, Clone, PartialEq)]
+/// #[derive(ConditionType, EnumSetType, Debug)]
 /// enum MyCondition {
 ///   // First condition must be Ready or Succeeded
 ///   Ready,

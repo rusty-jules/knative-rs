@@ -11,4 +11,5 @@ pub mod conditions {
 
 pub mod derive {
     pub use knative_derive::ConditionType;
+    pub use enumset::EnumSetType;
 }

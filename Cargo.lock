@@ -170,6 +170,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f107b87b6afc2a64fd13cac55fe06d6c8859f12d4b14cbcdd2c67d0976781be"
 
 [[package]]
+name = "enumset"
+version = "1.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4799cdb24d48f1f8a7a98d06b7fde65a85a2d1e42b25a889f5406aa1fbefe074"
+dependencies = [
+ "enumset_derive",
+ "serde",
+]
+
+[[package]]
+name = "enumset_derive"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea83a3fbdc1d999ccfbcbee717eab36f8edf2d71693a23ce0d7cca19e085304c"
+dependencies = [
+ "darling",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "fastrand"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -490,6 +512,7 @@ name = "knative"
 version = "0.1.1"
 dependencies = [
  "chrono",
+ "enumset",
  "k8s-openapi",
  "knative-conditions",
  "knative-derive",
@@ -506,6 +529,7 @@ name = "knative-conditions"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "enumset",
  "schemars",
  "serde",
  "serde_json",
@@ -515,6 +539,7 @@ dependencies = [
 name = "knative-derive"
 version = "0.1.0"
 dependencies = [
+ "enumset",
  "knative-conditions",
  "proc-macro2",
  "quote",
