@@ -4,9 +4,10 @@ use super::{
     status_types::Status,
 };
 use crate::derive::ConditionType;
-use crate::error::{DiscoveryError, Error};
+use crate::error::Error;
 use knative_conditions::{ConditionAccessor, Conditions};
 use enumset::EnumSetType;
+use thiserror::Error;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +27,12 @@ impl SourceSpec {
     }
 }
 
+#[derive(Error, Debug, Clone, Copy)]
+pub enum DestinationErr {
+    #[error("destination missing Ref and URI, expected at least one")]
+    Empty,
+}
+
 /// Destination represents a target of an invocation over HTTP.
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 pub struct Destination {
@@ -34,7 +41,33 @@ pub struct Destination {
     ref_: Option<KReference>,
     /// URI can be an absolute URL(non-empty scheme and non-empty host) pointing to the target or a relative URI.
     /// Relative URIs will be resolved using the base URI retrieved from Ref.
-    pub uri: Option<url::Url>,
+    // url::Url schemars definition denotes the "uri" json schema type
+    #[schemars(with = "Option<url::Url>")]
+    #[serde(default, with = "uri_serde")]
+    pub uri: Option<http::Uri>,
+}
+
+/// A version of [`http_serde::uri`](https://gitlab.com/kornelski/http-serde) with Option support
+/// following [serde #1301](https://github.com/serde-rs/serde/issues/1301).
+mod uri_serde {
+    use http::Uri;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(uri: &Option<Uri>, ser: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct Helper<'a>(#[serde(with = "http_serde::uri")] &'a Uri);
+        uri.as_ref().map(Helper).serialize(ser)
+    }
+
+    pub fn deserialize<'de, D>(de: D) -> Result<Option<Uri>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Helper(#[serde(with = "http_serde::uri")] Uri);
+        let helper = Option::deserialize(de)?;
+        Ok(helper.map(|Helper(uri)| uri))
+    }
 }
 
 impl From<KReference> for Destination {
@@ -43,39 +76,49 @@ impl From<KReference> for Destination {
             ref_: Some(KReference {
                 // combine the group and api_version, handling the case that this was done already
                 api_version: match (reference.api_version, reference.group) {
-                    (Some(api_version), _) if api_version.contains("/") => Some(api_version),
+                    (Some(api_version), _) if api_version.contains('/') => Some(api_version),
                     (Some(api_version), Some(group)) => Some(group + "/" + &api_version),
                     (Some(api_version), None) => Some(api_version),
-                    (None, _) => None
+                    (None, _) => None,
                 },
                 group: None,
                 kind: reference.kind,
                 namespace: reference.namespace,
-                name: reference.name
+                name: reference.name,
             }),
-            uri: None
+            uri: None,
         }
     }
 }
 
 impl From<url::Url> for Destination {
-    fn from(uri: url::Url) -> Self {
+    fn from(url: url::Url) -> Self {
         Destination {
             ref_: None,
-            uri: Some(uri)
+            uri: Some(url.as_str().parse::<http::Uri>().unwrap()),
         }
     }
 }
 
 impl Destination {
-    pub fn resolve_uri(&self, client: kube::Client) -> Result<url::Url, Error> {
+    pub async fn resolve_uri(
+        &self,
+        client: kube::Client,
+    ) -> Result<url::Url, Error> {
         match (&self.ref_, &self.uri) {
-            (Some(ref ref_), _) => {
-                let url = ref_.resolve_uri(client)?;
+            (Some(ref ref_), uri) => {
+                let mut url = ref_.resolve_uri(client).await?;
+                // If both ref and uri are specified, uri is relative to ref.
+                // https://github.com/knative/specs/blob/main/specs/eventing/control-plane.md#destination-resolution
+                if let Some(uri) = uri {
+                    url.path_segments_mut()
+                        .expect("KReference url must be base")
+                        .push(uri.path());
+                }
                 Ok(url)
             }
-            (None, Some(ref uri)) => Ok(uri.clone()),
-            (None, None) => Err(Error::Discovery(DiscoveryError::EmptyDestination))
+            (None, Some(uri)) => Ok(url::Url::parse(uri.to_string().as_str())?),
+            (None, None) => Err(DestinationErr::Empty)?,
         }
     }
 }

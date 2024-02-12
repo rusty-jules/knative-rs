@@ -1,0 +1,33 @@
+apiVersion: eventing.knative.dev/v1
+kind: Broker
+metadata:
+  name: default
+  namespace: default
+status:
+  address:
+    url: http://broker-ingress.default.svc.cluster.local/default/default
+  annotations:
+    knative.dev/channelAPIVersion: messaging.knative.dev/v1
+  conditions:
+    - lastTransitionTime: '2022-01-01T00:00:00Z'
+      status: 'True'
+      type: Addressable
+    - lastTransitionTime: '2022-01-01T00:00:00Z'
+      status: 'True'
+      type: FilterReady
+    - lastTransitionTime: '2022-01-01T00:00:00Z'
+      status: 'True'
+      type: IngressReady
+    - lastTransitionTime: '2022-01-01T00:00:00Z'
+      status: 'True'
+      type: Ready
+    - lastTransitionTime: '2022-01-01T00:00:00Z'
+      status: 'True'
+      type: TriggerChannelReady
+  observedGeneration: 1
+spec:
+  config:
+    apiVersion: v1
+    kind: ConfigMap
+    name: config-br-default-channel
+    namespace: default

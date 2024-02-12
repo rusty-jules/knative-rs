@@ -1,7 +1,21 @@
-use crate::error::{Error, DiscoveryError};
+use super::addressable_type::AddressableTypeExt;
+use crate::error::Error;
+use thiserror::Error;
 use k8s_openapi::api::core::v1::ObjectReference;
+use kube::{
+    api::{DynamicObject, GroupVersionKind},
+    discovery, Api,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, Error, Clone, Copy)]
+pub enum KRefErr {
+    #[error("apiVersion is incomplete or group does not exist")]
+    MalformedGVK,
+    #[error("must be namespaced")]
+    MustBeNamespaced,
+}
 
 /// KReference contains enough information to refer to another object.
 /// It's a trimmed down version of corev1.ObjectReference.
@@ -42,9 +56,46 @@ impl From<KReference> for ObjectReference {
 }
 
 impl KReference {
-    pub fn resolve_uri(&self, _client: kube::Client) -> Result<url::Url, Error> {
-        let _object_reference: ObjectReference = self.clone().into();
-        // unimplemented!("see knative.dev/pkg/resolver/addressable_resolver.go")
-        Err(Error::Discovery(DiscoveryError::ResolveKReferenceNotImplemented))
+    pub async fn resolve_uri(
+        &self,
+        client: kube::Client,
+    ) -> Result<url::Url, Error> {
+        let KReference {
+            group,
+            api_version,
+            namespace,
+            kind,
+            name,
+            ..
+        } = self;
+
+        let ns = namespace.as_ref()
+            .ok_or(KRefErr::MustBeNamespaced)?;
+
+        let (group, api_version) = match (group, api_version) {
+            (Some(group), Some(api_version)) => {
+                (group.as_str(), api_version.as_str())
+            }
+            (None, Some(api_version)) if api_version.contains('/') => {
+                let mut iter = api_version.split('/');
+                (iter.next().unwrap(), iter.next().unwrap())
+            },
+            _ => Err(KRefErr::MalformedGVK)?
+        };
+
+        let gvk = GroupVersionKind::gvk(
+            group,
+            api_version,
+            kind,
+        );
+
+        let (ar, _caps) = discovery::pinned_kind(&client, &gvk).await?;
+        let api = Api::<DynamicObject>::namespaced_with(client.clone(), ns, &ar);
+        let obj = api.get(name).await?;
+        let url = obj.address().await?;
+
+        debug_assert!(!url.cannot_be_a_base());
+
+        Ok(url)
     }
 }

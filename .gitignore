@@ -1,1 +1,3 @@
 target
+# for build pkg_config_path on nix
+.env
