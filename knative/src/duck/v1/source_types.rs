@@ -4,7 +4,7 @@ use super::{
     status_types::Status,
 };
 use crate::derive::ConditionType;
-use crate::error::{DiscoveryError, Error};
+use crate::error::Error;
 use knative_conditions::{ConditionAccessor, Conditions};
 use enumset::EnumSetType;
 use thiserror::Error;
