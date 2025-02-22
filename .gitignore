@@ -1,3 +1,5 @@
+# https://github.com/rust-lang/cargo/issues/315
+Cargo.lock
 target
 # for build pkg_config_path on nix
 .env
